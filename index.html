@@ -2225,56 +2225,21 @@ function openHeroPopup(h){
     <div class="ssp-stat"><div class="ssp-stat-label">SPEED</div><div class="ssp-stat-val blue">${(h.speedMult||1).toFixed(1)}×</div></div>
     <div class="ssp-stat"><div class="ssp-stat-label">CLASS</div><div class="ssp-stat-val">${HERO_CLASSES[h.type]?.label||h.type}</div></div>
   `;
-  // Weapon slot
+  // Weapon slot — show equipped item only, or empty state
   const ws=document.getElementById('ssp-weapon-slot');
   const inv=G.weaponInventory||[];
   const equipped=h.equippedWeapon?inv.find(w=>w.uid===h.equippedWeapon):null;
-  // Armor in popup
   const armorInv=G.armorInventory||[];
   const equippedArmor=h.equippedArmor?armorInv.find(a=>a.uid===h.equippedArmor):null;
-  let whtml='';
-  if(equipped){
-    whtml=`<div class="ssp-weapon"><div class="ssp-weapon-name ${WEAPON_RARITIES.find(r=>r.name===equipped.rarity)?.css||''}">${equipped.name} [${equipped.rarity}]</div><div class="ssp-weapon-stats">ATK +${_effectiveAtk(equipped)}${equipped.spd?` · SPD ${equipped.spd>0?'+':''}${equipped.spd}`:''}</div><button onclick="unequipWeapon('${equipped.uid}');openHeroPopup(heroes.find(x=>x.id===${h.id}))" style="margin-top:4px;font-family:var(--font);font-size:4px;padding:2px 5px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
-  } else {
-    const allWeapons=[...inv].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4)||(b.enhance||0)-(a.enhance||0));
-    if(allWeapons.length>0){
-      whtml='<div style="font-family:var(--font);font-size:4px;color:#336644;margin:4px 0;">WEAPONS:</div>';
-      for(const w of allWeapons){
-        const rc=WEAPON_RARITIES.find(r=>r.name===w.rarity)?.css||'';
-        const takenBy=w.equippedBy!=null?heroes.find(x=>x.id===w.equippedBy):null;
-        if(takenBy){
-          whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040810;border:1px solid #0e1a2a;opacity:0.4;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><span style="font-family:var(--font);font-size:4px;color:#446677;">on ${takenBy.nickname}</span></div>`;
-        } else {
-          whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><button onclick="equipWeaponToHero('${w.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
-        }
-      }
-    } else {
-      whtml='<div class="ssp-no-weapon" style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:6px;">— No weapons in inventory —</div>';
-    }
-  }
-  ws.innerHTML=whtml;
-  // Armor slot in hero popup
-  let ahtml='';
-  if(equippedArmor){
-    ahtml=`<div style="font-family:var(--font);font-size:5px;color:#224466;margin-top:5px;padding:4px 5px;background:#040e18;border:1px solid #1a3a5a;display:flex;justify-content:space-between;align-items:center;"><span>🛡 ${equippedArmor.name} DEF+${_effectiveDef(equippedArmor)}</span><button onclick="unequipArmor('${equippedArmor.uid}');openHeroPopup(h)" style="font-family:var(--font);font-size:4px;padding:1px 4px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
-  } else {
-    const allArmors=[...(G.armorInventory||[])].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4)||(b.enhance||0)-(a.enhance||0));
-    if(allArmors.length>0){
-      ahtml='<div style="font-family:var(--font);font-size:4px;color:#224466;margin:4px 0;">ARMOR:</div>';
-      for(const a of allArmors){
-        const rc=_rarityClass(a.rarity);
-        const takenBy=a.equippedBy!=null?heroes.find(x=>x.id===a.equippedBy):null;
-        if(takenBy){
-          ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040810;border:1px solid #0e1a2a;opacity:0.4;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><span style="font-family:var(--font);font-size:4px;color:#446677;">on ${takenBy.nickname}</span></div>`;
-        } else {
-          ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><button onclick="equipArmorToHero('${a.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
-        }
-      }
-    } else {
-      ahtml='<div style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:4px;">— No armor in inventory —</div>';
-    }
-  }
-  ws.innerHTML+=ahtml;
+  const rc=equipped?WEAPON_RARITIES.find(r=>r.name===equipped.rarity)?.css||'':'';
+  const arc=equippedArmor?_rarityClass(equippedArmor.rarity):'';
+  const whtml=equipped
+    ?`<div class="ssp-weapon"><div class="ssp-weapon-name ${rc}">⚔ ${equipped.name} [${equipped.rarity}]</div><div class="ssp-weapon-stats">ATK +${_effectiveAtk(equipped)}${equipped.spd?` · SPD ${equipped.spd>0?'+':''}${equipped.spd}`:''}</div><button onclick="unequipWeapon('${equipped.uid}');openHeroPopup(heroes.find(x=>x.id===${h.id}))" style="margin-top:4px;font-family:var(--font);font-size:4px;padding:2px 5px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`
+    :`<div style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:4px;">⚔ No weapon equipped</div>`;
+  const ahtml=equippedArmor
+    ?`<div style="font-family:var(--font);font-size:5px;margin-top:5px;padding:4px 5px;background:#040e18;border:1px solid #1a3a5a;display:flex;justify-content:space-between;align-items:center;"><span class="${arc}">🛡 ${equippedArmor.name} DEF+${_effectiveDef(equippedArmor)}</span><button onclick="unequipArmor('${equippedArmor.uid}');openHeroPopup(heroes.find(x=>x.id===${h.id}))" style="font-family:var(--font);font-size:4px;padding:1px 4px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`
+    :`<div style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:4px;">🛡 No armor equipped</div>`;
+  ws.innerHTML=whtml+ahtml;
   const growCost=Math.floor(80*Math.pow(1.22,h.growLevel));
   document.getElementById('ssp-grow-cost').textContent=`Cost: ${fmtNum(growCost)} gold`;
   const growBtn=document.getElementById('ssp-grow-btn');
@@ -2669,12 +2634,12 @@ function openHeroPicker(uid, isArmor){
 }
 function pickHeroEquip(heroId){
   if(!_pickerUid)return;
-  if(_pickerIsArmor){equipArmorToHero(_pickerUid,heroId);}
-  else{equipWeaponToHero(_pickerUid,heroId);}
+  const uid=_pickerUid, isArmor=_pickerIsArmor;
+  if(isArmor){equipArmorToHero(uid,heroId);}
+  else{equipWeaponToHero(uid,heroId);}
   refreshInventoryUI();
   closeHeroPicker();
-  // Refresh detail view with updated state
-  openInvDetail(_pickerUid,_pickerIsArmor);
+  openInvDetail(uid,isArmor);
 }
 function closeHeroPicker(){
   document.getElementById('hero-picker-modal').classList.remove('open');
