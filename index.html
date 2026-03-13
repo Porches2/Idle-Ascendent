@@ -2976,6 +2976,16 @@ _auth.onAuthStateChanged(async user => {
         showMessage('⚔ Welcome to Blade Idle!', true);
         addEvoLog('Adventure begins!');
       }
+    } else if (heroes.length === 0) {
+      // Cloud save loaded but had no heroes (corrupted save or post-prestige)
+      // Try localStorage first, otherwise spawn a fresh starter party
+      const localLoaded = loadGame();
+      if (!localLoaded) {
+        G.resources.gold = 200;
+        spawnHero('warrior'); spawnHero('warrior'); spawnHero('rogue');
+        showMessage('⚔ Starting fresh party!', true);
+        addEvoLog('Adventure begins!');
+      }
     }
     updateUI(); updateHeroBar();
 
@@ -2994,6 +3004,7 @@ _auth.onAuthStateChanged(async user => {
 // ── Cloud save ───────────────────────────────
 async function _cloudSave() {
   if (!_currentUser) return;
+  if (heroes.length === 0) return; // Never overwrite a good save with an empty party
   try {
     _setCloudStatus('saving...');
     const data = {
@@ -3076,6 +3087,7 @@ function _applyLoadedData(data) {
 const _origBtnSave = document.getElementById('btn-save');
 if (_origBtnSave) {
   _origBtnSave.onclick = () => {
+    if (heroes.length === 0) { showMessage('⚠ No heroes to save yet!'); return; }
     saveGame(); // localStorage backup
     _cloudSave();
   };
@@ -3085,7 +3097,7 @@ if (_origBtnSave) {
 const _origSaveGame = saveGame;
 window.saveGame = function() {
   _origSaveGame();
-  if (_currentUser) _cloudSave();
+  if (_currentUser && heroes.length > 0) _cloudSave();
 };
 
 function _setCloudStatus(msg) {
