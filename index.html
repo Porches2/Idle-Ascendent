@@ -2940,10 +2940,16 @@ let _cloudSaveTimer = null;
 // ── Login button ──────────────────────────────
 document.getElementById('btn-google-login').onclick = () => {
   const provider = new firebase.auth.GoogleAuthProvider();
-  _auth.signInWithPopup(provider).catch(err => {
-    console.error('Login failed:', err);
-    alert('Login failed: ' + err.message);
-  });
+  _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(() => _auth.signInWithPopup(provider))
+    .catch(err => {
+      console.error('Login failed:', err);
+      if (err.code === 'auth/popup-blocked') {
+        alert('Popup blocked — please allow popups for this site and try again.');
+      } else {
+        alert('Login failed: ' + err.message);
+      }
+    });
 };
 
 // ── Logout button ────────────────────────────
