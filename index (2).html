@@ -1,0 +1,3098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Blade Idle — MMORPG Farming & Boss Waves</title>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;image-rendering:pixelated;}
+:root{
+  --gold:#ffcc44;--dkgold:#7a5a00;--green:#3aff3a;--red:#ff4444;
+  --blue:#44aaff;--purple:#cc44ff;--teal:#44ddcc;--orange:#ff8844;
+  --bg:#06090f;--panel:#0a0e1a;--border:#1a2a4a;--font:'Press Start 2P','Courier New',monospace;
+}
+body{background:var(--bg);color:#8aacca;font-family:var(--font);overflow:hidden;width:100vw;height:100vh;user-select:none;touch-action:none;}
+#gameCanvas{position:fixed;top:0;left:0;width:100%;height:100%;cursor:crosshair;image-rendering:pixelated;}
+
+/* ── MOBILE HUD ── */
+#mobile-hud{display:none;position:fixed;top:0;left:0;right:0;height:32px;background:#050810;border-bottom:2px solid var(--border);z-index:20;align-items:center;gap:0;overflow:hidden;}
+#hud-menu-btn{width:32px;height:32px;background:#070c18;border:none;border-right:2px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.hud-hamburger{display:flex;flex-direction:column;gap:3px;}
+.hud-hamburger span{display:block;width:14px;height:2px;background:#44aaff;}
+.hud-cell{display:flex;align-items:center;gap:3px;padding:0 6px;border-right:1px solid #0e1a2a;}
+.hud-icon{font-size:8px;}
+.hud-val{font-family:var(--font);font-size:5px;color:var(--gold);}
+.hud-val.crystal-col{color:var(--purple);}
+.hud-val.chaos-col{color:var(--red);}
+.hud-val.orange-col{color:var(--orange);}
+#ui-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9;}
+
+/* ── STAT PANEL ── */
+#ui{position:fixed;top:8px;left:8px;width:210px;background:var(--panel);border:2px solid var(--border);outline:2px solid #030610;outline-offset:-4px;padding:8px 8px 6px;z-index:10;pointer-events:all;max-height:calc(100vh - 100px);overflow-y:auto;}
+#ui::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;box-shadow:inset 2px 2px 0 #1a3a6a,inset -2px -2px 0 #040810;}
+#ui-title{font-family:var(--font);font-size:8px;color:var(--gold);text-align:center;letter-spacing:2px;margin-bottom:4px;text-transform:uppercase;}
+#tier-name{font-family:var(--font);font-size:6px;color:var(--teal);text-align:center;letter-spacing:1px;margin-bottom:6px;}
+.stat-row{display:flex;justify-content:space-between;font-family:var(--font);font-size:6px;margin:3px 0;color:#446677;}
+.stat-val{color:var(--gold);font-size:7px;}
+.stat-val.blue{color:var(--blue);}
+.stat-val.purple{color:var(--purple);}
+.stat-val.red{color:var(--red);}
+.stat-bar-wrap{height:3px;background:#0a1020;margin:2px 0 4px;border:1px solid #1a2a3a;}
+.stat-bar{height:100%;background:var(--blue);transition:width 0.3s;}
+.chaos-bar{background:var(--red);}
+.divider{border:none;border-top:1px solid #0e1a2a;margin:6px 0;}
+#ui-toggle{width:100%;background:#070c18;border:1px solid var(--border);color:#446677;font-family:var(--font);font-size:5px;padding:3px;cursor:pointer;margin-bottom:4px;}
+#ui-toggle:hover{color:var(--blue);}
+
+/* ── TABS ── */
+.ui-tabs{display:flex;gap:2px;margin:4px 0;}
+.ui-tab{flex:1;padding:4px 2px;background:#070c18;border:1px solid var(--border);color:#446677;font-family:var(--font);font-size:5px;cursor:pointer;text-align:center;text-transform:uppercase;}
+.ui-tab.active,.ui-tab:hover{background:#0e1830;border-color:var(--blue);color:var(--blue);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── BUTTONS ── */
+.btn{width:100%;display:flex;justify-content:space-between;align-items:center;padding:5px 6px;margin:2px 0;background:#070c18;border:2px solid var(--border);color:#8aacca;font-family:var(--font);font-size:5px;cursor:pointer;text-align:left;box-shadow:1px 1px 0 #020508;}
+.btn:hover:not(:disabled){background:#0e1830;border-color:var(--blue);color:#aaccee;}
+.btn:disabled{opacity:0.3;cursor:not-allowed;}
+.btn-label{text-transform:uppercase;}
+.cost{color:#446677;font-size:5px;}
+.sink-section-label{font-family:var(--font);font-size:5px;color:#2a5588;letter-spacing:1px;text-transform:uppercase;margin:5px 0 2px;opacity:0.9;}
+
+/* ── MESSAGES ── */
+#messages{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,85vw);pointer-events:none;z-index:50;display:flex;flex-direction:column;gap:4px;align-items:center;}
+.message{background:rgba(5,10,20,0.95);border:2px solid #1a3a5a;font-family:var(--font);font-size:6px;color:#8aacca;padding:6px 14px;text-align:center;animation:fadeMsg 7.2s forwards;box-shadow:2px 2px 0 #020508;}
+.message.important{border-color:var(--gold);color:var(--gold);}
+@keyframes fadeMsg{0%{opacity:0;transform:scale(0.9)}5%{opacity:1;transform:scale(1)}85%{opacity:1}100%{opacity:0}}
+
+/* ── WAVE UI ── */
+#wave-ui{position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(5,8,18,0.92);border:2px solid #1a2a4a;padding:6px 14px;z-index:11;pointer-events:none;text-align:center;min-width:180px;}
+#wave-label{font-family:var(--font);font-size:5px;color:#446677;letter-spacing:2px;}
+#wave-number{font-family:var(--font);font-size:8px;color:var(--orange);margin:2px 0;}
+#wave-timer-row{display:flex;justify-content:space-between;font-family:var(--font);font-size:5px;color:#446677;gap:10px;}
+#wave-progress-bar{height:4px;background:#0a1020;border:1px solid #1a2a3a;margin-top:4px;}
+#wave-progress-fill{height:100%;background:var(--orange);transition:width 0.2s;}
+
+/* ── EVENT BANNER ── */
+#event-banner{display:none;position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#050810;border:2px solid var(--gold);padding:8px 16px;z-index:12;text-align:center;pointer-events:none;}
+#event-title{font-family:var(--font);font-size:7px;color:var(--gold);margin-bottom:3px;}
+#event-desc{font-family:var(--font);font-size:5px;color:#8aacca;}
+
+/* ── BOSS OVERLAY ── */
+#boss-overlay{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050008;border:3px solid #880022;padding:16px 24px;z-index:25;text-align:center;animation:bossFlash 0.5s;}
+@keyframes bossFlash{0%{opacity:0;transform:translate(-50%,-50%) scale(0.8)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+#boss-overlay h2{font-family:var(--font);font-size:10px;color:#ff2244;}
+.boss-name{font-family:var(--font);font-size:7px;color:#ff88aa;margin:6px 0;}
+.boss-sub{font-family:var(--font);font-size:5px;color:#884455;line-height:2;}
+
+/* ── ENEMY HUD ── */
+#enemy-hud{position:fixed;right:8px;top:50%;transform:translateY(-50%);width:120px;max-height:300px;overflow-y:auto;z-index:12;display:none;flex-direction:column;gap:2px;}
+.ehud-header{font-family:var(--font);font-size:4px;color:#ff6644;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #441a1a;padding-bottom:2px;margin-bottom:1px;}
+.ehud-row{display:flex;align-items:center;gap:3px;padding:2px 3px;background:rgba(6,4,4,0.75);border:1px solid #1a0a0a;}
+.ehud-icon{font-size:7px;line-height:1;flex-shrink:0;}
+.ehud-name{font-family:var(--font);font-size:3px;color:#886655;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ehud-hpbar{width:100%;height:3px;background:#1a0808;margin-top:1px;}
+.ehud-hpfill{height:3px;background:#cc2222;transition:width 0.15s;}
+.ehud-hpfill.boss{background:linear-gradient(90deg,#880022,#ff0044);}
+
+/* ── DIFFICULTY BADGE ── */
+#difficulty-badge{position:fixed;top:38px;left:50%;transform:translateX(-50%);background:#0c0000;border:2px solid #661100;padding:3px 10px;font-family:var(--font);font-size:5px;color:#ff5522;z-index:11;pointer-events:none;letter-spacing:1px;display:none;}
+
+/* ── RAID MODAL ── */
+#raid-modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;background:#050810;border:2px solid var(--gold);padding:14px;z-index:30;text-align:center;}
+#raid-modal h3{font-family:var(--font);font-size:8px;color:var(--gold);margin-bottom:8px;}
+#raid-modal-results{font-family:var(--font);font-size:5px;color:#8aacca;line-height:2.2;margin-bottom:8px;}
+.raid-result-row{display:flex;justify-content:space-between;border-bottom:1px solid #0e1a2a;padding:2px 0;}
+.raid-result-row .val.good{color:var(--green);}
+.raid-result-row .val.bad{color:var(--red);}
+#raid-modal-close{padding:6px 16px;background:#070c18;border:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:6px;cursor:pointer;}
+#raid-modal-close:hover{background:#1a1400;}
+
+/* ── HERO BAR (bottom) ── */
+#hero-bar{position:fixed;bottom:0;left:0;right:0;height:100px;background:#050810;border-top:2px solid var(--border);z-index:10;display:flex;align-items:center;gap:4px;padding:4px 8px;overflow-x:auto;}
+#hero-bar::-webkit-scrollbar{height:3px;}
+#hero-bar::-webkit-scrollbar-thumb{background:#1a2a4a;}
+#hero-bar-label{font-family:var(--font);font-size:5px;color:#2a4a6a;writing-mode:vertical-lr;transform:rotate(180deg);flex-shrink:0;letter-spacing:2px;}
+.hero-portrait{position:relative;width:72px;min-height:94px;background:#07100a;border:2px solid #1a2a4a;cursor:pointer;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:4px 2px 2px;overflow:hidden;}
+.hero-portrait:hover{border-color:var(--blue);}
+.hero-portrait.selected{border-color:var(--gold);background:#0e1820;}
+.hero-portrait.tier-champion{border-color:#cc8800;box-shadow:0 0 6px #cc880066;}
+.hero-portrait.tier-legend{border-color:#ff4400;box-shadow:0 0 8px #ff440099;}
+.hero-portrait.tier-mystic{border-color:#cc44ff;box-shadow:0 0 12px #cc44ffaa;}
+.portrait-tier-badge{position:absolute;top:2px;right:2px;font-family:var(--font);font-size:4px;padding:1px 2px;line-height:1;}
+.badge-champion{color:#ffcc44;background:#2a1a00;}
+.badge-legend{color:#ff6622;background:#2a0800;}
+.badge-mystic{color:#dd88ff;background:#1a0028;}
+.portrait-fx-canvas{position:absolute;top:0;left:0;pointer-events:none;image-rendering:pixelated;}
+.portrait-canvas{image-rendering:pixelated;}
+.portrait-name{font-family:var(--font);font-size:4px;color:#446677;text-align:center;margin-top:1px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.portrait-class{font-family:var(--font);font-size:3px;color:#2a4a6a;text-align:center;}
+.portrait-level{position:absolute;top:2px;left:2px;font-family:var(--font);font-size:4px;color:var(--gold);}
+.portrait-class{font-family:var(--font);font-size:3px;color:#2a4a6a;text-align:center;}
+.portrait-hp-bar{width:calc(100% - 4px);height:3px;background:#0a1020;margin-top:2px;border:1px solid #1a2a3a;}
+.portrait-hp-fill{height:100%;background:var(--green);transition:width 0.3s;}
+.portrait-level{position:absolute;top:2px;left:2px;font-family:var(--font);font-size:4px;color:var(--gold);}
+.portrait-weapon-badge{position:absolute;bottom:14px;left:1px;font-size:8px;line-height:1;}
+
+/* ── INVENTORY PANEL ── */
+#inventory-panel{display:none;position:fixed;right:0;top:0;bottom:76px;width:240px;background:var(--panel);border-left:2px solid var(--border);z-index:13;overflow-y:auto;padding:10px 8px;}
+#inventory-panel h3{font-family:var(--font);font-size:7px;color:var(--gold);margin-bottom:6px;text-align:center;}
+.panel-close-btn{position:absolute;top:6px;right:6px;width:18px;height:18px;background:#070c18;border:1px solid var(--border);color:var(--gold);font-family:var(--font);font-size:7px;cursor:pointer;text-align:center;line-height:16px;}
+.weapon-card{display:flex;flex-direction:column;gap:3px;padding:6px 7px;margin:3px 0;background:#0e1420;border:2px solid #1a2a4a;box-shadow:2px 2px 0 #030610;}
+.weapon-name{font-family:var(--font);font-size:6px;text-transform:uppercase;}
+.weapon-stats{font-family:var(--font);font-size:5px;color:#44677a;line-height:1.8;}
+.weapon-equip-btn{padding:3px 8px;background:#071418;border:2px solid #1a5a6a;color:var(--teal);font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;}
+.weapon-equip-btn:hover:not(:disabled){background:#0e2030;border-color:var(--teal);}
+.weapon-equip-btn.equipped{border-color:var(--gold)!important;color:var(--gold)!important;}
+.weapon-equip-btn:disabled{opacity:0.3;cursor:not-allowed;}
+.rarity-COMMON{color:#8aacca;}
+.rarity-UNCOMMON{color:var(--green);}
+.rarity-RARE{color:var(--blue);}
+.rarity-EPIC{color:var(--purple);}
+.rarity-LEGENDARY{color:var(--gold);}
+.inv-empty{font-family:var(--font);font-size:6px;color:#2a4a6a;text-align:center;padding:12px 0;line-height:2;}
+.inv-section-hdr{font-family:var(--font);font-size:6px;color:#6688aa;letter-spacing:2px;text-transform:uppercase;padding:5px 0 3px;border-bottom:1px solid #1a2a3a;margin-bottom:4px;margin-top:6px;}
+
+/* ── RESEARCH / UPGRADE PANELS ── */
+#right-panel-tabs{display:none;position:fixed;right:0;bottom:76px;z-index:14;display:flex;flex-direction:column;gap:2px;padding:4px;}
+.rpanel-tab{padding:4px 7px;background:#060c18;border:2px solid var(--border);color:#446677;font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;white-space:nowrap;text-align:right;}
+.rpanel-tab:hover,.rpanel-tab.active{background:#0e1830;border-color:var(--blue);color:var(--blue);}
+.notif-dot{display:none;width:4px;height:4px;background:var(--red);border-radius:50%;margin-left:3px;vertical-align:middle;}
+
+/* ── PRESTIGE MODAL ── */
+#prestige-modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;background:#050810;border:2px solid var(--purple);padding:14px;z-index:30;text-align:center;}
+#prestige-modal h2{font-family:var(--font);font-size:8px;color:var(--purple);margin-bottom:8px;}
+#prestige-desc{font-family:var(--font);font-size:5px;color:#8aacca;margin-bottom:8px;line-height:2;}
+.prestige-pts{font-family:var(--font);font-size:14px;color:var(--gold);margin:8px 0;}
+.prestige-btn{padding:6px 16px;font-family:var(--font);font-size:6px;cursor:pointer;margin:4px;}
+.prestige-btn.confirm{background:#0a0020;border:2px solid var(--purple);color:var(--purple);}
+.prestige-btn.cancel{background:#070c18;border:2px solid var(--border);color:#446677;}
+
+/* ── HERO STAT POPUP ── */
+#hero-stat-popup{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:260px;background:#050810;border:2px solid var(--gold);outline:2px solid #030610;outline-offset:-4px;padding:10px 12px 12px;z-index:30;pointer-events:all;}
+.ssp-close{position:absolute;top:6px;right:6px;width:18px;height:18px;background:#070c18;border:1px solid var(--border);color:var(--gold);font-family:var(--font);font-size:7px;cursor:pointer;text-align:center;line-height:16px;}
+.ssp-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.ssp-portrait{width:36px;height:64px;image-rendering:pixelated;flex-shrink:0;}
+.ssp-title-block{flex:1;min-width:0;}
+.ssp-title{font-family:var(--font);font-size:7px;color:var(--gold);text-transform:uppercase;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ssp-type{font-family:var(--font);font-size:5px;color:#2a5a8a;letter-spacing:1px;}
+.ssp-divider{border:none;border-top:1px solid #0e1a2a;margin:6px 0;}
+.ssp-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;}
+.ssp-stat{display:flex;flex-direction:column;}
+.ssp-stat-label{font-family:var(--font);font-size:4px;color:#2a5a8a;letter-spacing:1px;text-transform:uppercase;}
+.ssp-stat-val{font-family:var(--font);font-size:8px;color:var(--gold);}
+.ssp-stat-val.blue{color:var(--blue);}
+.ssp-stat-val.red{color:var(--red);}
+.ssp-stat-val.purple{color:var(--purple);}
+.ssp-weapon{margin-top:7px;padding:5px 6px;background:#040e18;border:1px solid #1a3a5a;font-family:var(--font);font-size:5px;}
+.ssp-weapon-name{color:var(--blue);margin-bottom:2px;}
+.ssp-weapon-stats{color:#2a5a8a;line-height:1.8;}
+.ssp-grow-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;}
+.ssp-grow-cost{font-family:var(--font);font-size:5px;color:#2a5a8a;}
+.ssp-grow-btn{padding:4px 10px;background:#071018;border:2px solid #1a4a6a;color:var(--teal);font-family:var(--font);font-size:6px;cursor:pointer;text-transform:uppercase;}
+.ssp-grow-btn:hover:not(:disabled){background:#0e2030;border-color:var(--teal);color:#aaeedd;}
+.ssp-grow-btn:disabled{opacity:0.3;cursor:not-allowed;}
+
+/* ── EVA LOG ── */
+#evo-log{position:fixed;left:226px;bottom:80px;width:180px;pointer-events:none;z-index:9;}
+.evo-entry{font-family:var(--font);font-size:4px;color:#2a5a8a;margin-bottom:2px;padding:2px 4px;background:rgba(5,8,18,0.7);}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:#050810;}
+::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* ── TIPS MODAL ── */
+#tips-modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:300px;max-height:80vh;overflow-y:auto;background:#050810;border:2px solid var(--blue);padding:14px;z-index:35;text-align:center;}
+#tips-modal h3{font-family:var(--font);font-size:7px;color:var(--blue);margin-bottom:10px;}
+#tips-content{font-family:var(--font);font-size:5px;color:#8aacca;line-height:2.5;text-align:left;}
+#tips-modal-close{margin-top:10px;padding:6px 16px;background:#070c18;border:2px solid var(--blue);color:var(--blue);font-family:var(--font);font-size:6px;cursor:pointer;}
+#tips-btn{position:fixed;top:8px;right:8px;width:24px;height:24px;background:#070c18;border:2px solid var(--border);color:var(--blue);font-family:var(--font);font-size:8px;cursor:pointer;z-index:12;}
+
+/* ── MERGE MODAL ── */
+#merge-modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;background:#050810;border:2px solid var(--purple);padding:14px;z-index:30;text-align:center;}
+#merge-modal h2{font-family:var(--font);font-size:7px;color:var(--purple);margin-bottom:6px;}
+#merge-modal p{font-family:var(--font);font-size:5px;color:#8aacca;line-height:2;margin-bottom:8px;}
+.merge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0;}
+.merge-btn{padding:5px 12px;background:#070c18;border:2px solid;font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;}
+.merge-btn.confirm{border-color:var(--purple);color:var(--purple);}
+.merge-btn.cancel{border-color:var(--border);color:#446677;}
+
+/* ── OFFLINE POPUP ── */
+#offline-popup{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;background:#050810;border:2px solid var(--teal);padding:14px;z-index:35;text-align:center;}
+#offline-popup h3{font-family:var(--font);font-size:7px;color:var(--teal);margin-bottom:8px;}
+#offline-results{font-family:var(--font);font-size:5px;color:#8aacca;line-height:2.2;margin-bottom:8px;}
+#offline-close-btn{padding:6px 16px;background:#070c18;border:2px solid var(--teal);color:var(--teal);font-family:var(--font);font-size:6px;cursor:pointer;}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:600px){
+  #mobile-hud{display:flex;}
+  #ui{display:none;position:fixed;top:32px;left:0;width:220px;max-height:calc(100vh - 108px);z-index:20;}
+  #ui.open{display:block;}
+  #ui-backdrop.open{display:block;}
+  #wave-ui{top:36px;}
+  #messages{bottom:82px;}
+  #hero-bar{height:88px;}
+  .hero-portrait{width:66px;min-height:86px;}
+  #tips-btn{top:36px;}
+  #inv-nav-btn{top:36px;}
+}
+
+/* ── INVENTORY MODAL ── */
+#inv-modal-backdrop{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:40;
+}
+#inv-modal-backdrop.open{display:block;}
+#inv-modal{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(520px,96vw);max-height:80vh;
+  background:var(--panel);border:2px solid var(--border);
+  outline:2px solid #030610;outline-offset:-4px;
+  z-index:41;display:flex;flex-direction:column;
+}
+#inv-modal-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;background:#070d1c;border-bottom:2px solid var(--border);flex-shrink:0;
+}
+#inv-modal-title{font-family:var(--font);font-size:8px;color:var(--gold);letter-spacing:2px;}
+.inv-modal-close{width:20px;height:20px;background:#0a0e1a;border:1px solid var(--border);
+  color:var(--gold);font-family:var(--font);font-size:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.inv-modal-close:hover{border-color:var(--red);color:var(--red);}
+/* tab bar */
+.inv-tab-bar{display:flex;flex-shrink:0;border-bottom:2px solid var(--border);}
+.inv-tab{flex:1;padding:6px 4px;background:#060c18;border:none;border-right:1px solid var(--border);
+  color:#446677;font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;}
+.inv-tab:last-child{border-right:none;}
+.inv-tab.active{background:#0e1830;color:var(--blue);border-bottom:2px solid var(--blue);margin-bottom:-2px;}
+/* grid view */
+#inv-body{overflow-y:auto;padding:10px;}
+.inv-grid{display:grid;grid-template-columns:repeat(4,72px);gap:4px;}
+.inv-slot{
+  width:72px;height:72px;background:#0b1220;border:2px solid #1a2a4a;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:1px;position:relative;transition:border-color 0.15s;
+  overflow:hidden;
+}
+.inv-slot:hover{background:#111a2e;}
+.inv-slot.rarity-COMMON  {border-color:#3a5a7a;}
+.inv-slot.rarity-UNCOMMON{border-color:#1a6a1a;}
+.inv-slot.rarity-RARE    {border-color:#1a4aaa;}
+.inv-slot.rarity-EPIC    {border-color:#6a1aaa;}
+.inv-slot.rarity-LEGENDARY{border-color:#aa7a00;}
+.inv-slot.equipped-slot::after{
+  content:'E';position:absolute;top:2px;right:3px;
+  font-family:var(--font);font-size:4px;color:var(--gold);
+}
+.inv-slot-icon{font-size:20px;line-height:1;}
+.inv-slot canvas{image-rendering:pixelated;display:block;}
+.inv-slot-plus{position:absolute;bottom:2px;left:3px;font-family:var(--font);font-size:4px;color:var(--gold);}
+.inv-slot-name{font-family:var(--font);font-size:3px;color:#5a7a9a;text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:90%;padding:0 2px;}
+.inv-empty-msg{font-family:var(--font);font-size:6px;color:#2a4a6a;text-align:center;padding:30px 0;line-height:2.5;}
+/* detail view */
+#inv-detail{display:none;flex-direction:column;gap:8px;padding:12px;}
+#inv-detail.open{display:flex;}
+#inv-detail-back{
+  align-self:flex-start;padding:3px 10px;background:#060c18;border:1px solid var(--border);
+  color:#446677;font-family:var(--font);font-size:5px;cursor:pointer;margin-bottom:2px;
+}
+#inv-detail-back:hover{color:var(--blue);border-color:var(--blue);}
+#inv-detail-card{
+  padding:12px;border:2px solid #1a2a4a;background:#0a1020;
+}
+.det-name{font-family:var(--font);font-size:9px;margin-bottom:4px;}
+.det-badge{font-family:var(--font);font-size:5px;color:#446677;margin-bottom:8px;}
+.det-stat{font-family:var(--font);font-size:6px;color:#44aaff;margin:3px 0;line-height:1.8;}
+.det-special{font-family:var(--font);font-size:5px;color:var(--purple);margin-top:2px;}
+.det-equip-row{margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.det-btn{padding:4px 12px;font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;}
+.det-btn.equip{background:#071418;border:2px solid #1a5a6a;color:var(--teal);}
+.det-btn.equip:hover{background:#0e2030;border-color:var(--teal);}
+.det-btn.unequip{background:#1a0808;border:2px solid #662222;color:#ff6666;}
+.det-btn.unequip:hover{background:#2a0808;}
+.det-enh-row{
+  margin-top:8px;padding:8px;background:#040e18;border:1px solid #1a3a5a;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.det-enh-label{font-family:var(--font);font-size:6px;color:#446677;}
+.det-enh-level{font-family:var(--font);font-size:10px;color:var(--gold);}
+.det-enh-cost{font-family:var(--font);font-size:5px;color:#446677;}
+.det-enh-btn{padding:5px 14px;background:#070c00;border:2px solid #6a5a00;color:var(--gold);
+  font-family:var(--font);font-size:5px;cursor:pointer;text-transform:uppercase;}
+.det-enh-btn:hover{background:#1a1400;border-color:var(--gold);}
+.det-enh-btn:disabled{opacity:0.3;cursor:not-allowed;}
+.det-enh-maxed{font-family:var(--font);font-size:7px;color:var(--gold);}
+.det-hero-tag{font-family:var(--font);font-size:5px;color:var(--gold);}
+/* nav button */
+#inv-nav-btn{
+  position:fixed;top:8px;right:36px;padding:0;
+  width:24px;height:24px;
+  background:#070d1c;border:2px solid var(--border);color:var(--gold);
+  font-family:var(--font);font-size:6px;cursor:pointer;z-index:12;
+  display:flex;align-items:center;justify-content:center;
+}
+#inv-nav-btn:hover,#inv-nav-btn.open{border-color:var(--gold);color:var(--gold);background:#14100a;}
+.inv-nav-count{
+  position:absolute;top:-4px;right:-4px;
+  background:#aa7a00;color:#000;
+  font-family:var(--font);font-size:4px;padding:1px 3px;
+  min-width:10px;text-align:center;line-height:1.2;
+}
+
+/* ── FIREBASE AUTH UI ── */
+#auth-overlay{position:fixed;inset:0;background:rgba(3,5,14,0.97);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+#auth-overlay h1{font-family:var(--font);font-size:14px;color:var(--gold);letter-spacing:3px;margin:0;}
+#auth-overlay p{font-family:var(--font);font-size:6px;color:#446677;margin:0;text-align:center;line-height:2.2;}
+#btn-google-login{display:flex;align-items:center;gap:10px;background:#fff;border:none;border-radius:2px;padding:10px 20px;cursor:pointer;font-size:13px;font-weight:600;color:#444;box-shadow:0 2px 8px rgba(0,0,0,0.5);}
+#btn-google-login img{width:20px;height:20px;}
+#btn-google-login:hover{background:#f0f0f0;}
+#auth-user-bar{position:fixed;top:8px;right:64px;z-index:20;display:flex;align-items:center;gap:6px;background:rgba(5,10,20,0.85);border:1px solid var(--border);padding:3px 7px;}
+#auth-user-bar img{width:18px;height:18px;border-radius:50%;}
+#auth-user-name{font-family:var(--font);font-size:4px;color:#8aacca;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#btn-logout{font-family:var(--font);font-size:4px;color:#446677;background:none;border:none;cursor:pointer;padding:0 2px;}
+#btn-logout:hover{color:#cc4444;}
+#cloud-save-status{font-family:var(--font);font-size:4px;color:#44aa77;margin-left:2px;}
+</style>
+</head>
+<body>
+
+<!-- ── AUTH OVERLAY ── -->
+<div id="auth-overlay">
+  <h1>⚔ BLADE IDLE</h1>
+  <p>Sign in to save your progress<br>across all devices</p>
+  <button id="btn-google-login">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+    Sign in with Google
+  </button>
+  <p style="font-size:5px;color:#223344;">Your save is stored securely in the cloud</p>
+</div>
+
+<!-- ── USER BAR (shown when logged in) ── -->
+<div id="auth-user-bar" style="display:none;">
+  <img id="auth-avatar" src="" alt="">
+  <span id="auth-user-name"></span>
+  <span id="cloud-save-status">☁</span>
+  <button id="btn-logout">sign out</button>
+</div>
+<div id="mobile-hud">
+  <button id="hud-menu-btn"><div class="hud-hamburger"><span></span><span></span><span></span></div></button>
+  <div class="hud-cell"><div class="hud-icon">💰</div><div class="hud-val" id="hud-gold">0</div></div>
+  <div class="hud-cell"><div class="hud-icon">👥</div><div class="hud-val" id="hud-pop">0</div></div>
+  <div class="hud-cell"><div class="hud-icon">🔷</div><div class="hud-val crystal-col" id="hud-crystal">0</div></div>
+  <div class="hud-cell"><div class="hud-icon">☠</div><div class="hud-val chaos-col" id="hud-chaos">0</div></div>
+  <div class="hud-cell"><div class="hud-icon">⚔</div><div class="hud-val orange-col" id="hud-wave">W0</div></div>
+</div>
+<div id="ui-backdrop"></div>
+
+<div id="ui">
+  <div id="ui-title">⚔ BLADE IDLE</div>
+  <div id="tier-name">TIER 1 — ADVENTURER</div>
+  <button id="ui-toggle">▲ hide</button>
+  <div class="stat-row"><span>Party Size</span><span class="stat-val" id="s-pop">0</span></div>
+  <div class="stat-row"><span>Gold</span><span class="stat-val" id="s-gold">0</span></div>
+  <div class="stat-row"><span>Mana</span><span class="stat-val blue" id="s-data">0</span></div>
+  <div class="stat-row"><span>Crystal</span><span class="stat-val purple" id="s-crystal">0</span></div>
+  <div class="stat-row"><span>Chaos</span><span class="stat-val red" id="s-chaos">0</span></div>
+  <div class="stat-bar-wrap"><div class="stat-bar chaos-bar" id="bar-chaos" style="width:0%"></div></div>
+  <div class="stat-row"><span>Relics</span><span class="stat-val" style="color:var(--orange)" id="s-relic">0</span></div>
+  <div class="stat-row"><span>📜 Scrolls</span><span class="stat-val" id="s-scrolls" style="color:#ccaa44">0</span></div>
+  <div class="stat-row"><span>Guild Rank</span><span class="stat-val" id="s-int">0</span></div>
+  <div class="stat-bar-wrap"><div class="stat-bar" id="bar-int" style="width:0%"></div></div>
+  <div class="stat-row"><span>Prestige Pts</span><span class="stat-val" style="color:var(--purple)" id="s-prestige">0</span></div>
+  <hr class="divider">
+  <div id="s-event"></div>
+  <div id="raid-countdown" style="font-family:var(--font);font-size:5px;color:var(--red);"></div>
+  <div class="ui-tabs">
+    <button class="ui-tab active" data-tab="tab-build">BUILD</button>
+    <button class="ui-tab" data-tab="tab-party">PARTY</button>
+    <button class="ui-tab" data-tab="tab-research">SKILLS</button>
+    <button class="ui-tab" data-tab="tab-defense">GUILD</button>
+  </div>
+  <!-- BUILD tab -->
+  <div class="tab-panel active" id="tab-build">
+    <div class="sink-section-label">— CAMP —</div>
+    <button class="btn" id="btn-grow"><span class="btn-label">▲ Camp Upgrade</span><span class="cost" id="cost-grow">50 gold</span></button>
+    <button class="btn" id="btn-lab"><span class="btn-label">⚗ Alchemy Lab</span><span class="cost">1000 gold</span></button>
+    <div class="sink-section-label">— PRODUCTION —</div>
+    <button class="btn" id="btn-factory"><span class="btn-label">⚙ Build Forge</span><span class="cost" id="cost-factory">500 gold</span></button>
+    <button class="btn" id="btn-mine"><span class="btn-label" id="mine-btn-label">⛏ Crystal Mine</span><span class="cost" id="cost-mine">300 gold</span></button>
+    <button class="btn" id="btn-datanode"><span class="btn-label">📡 Mana Conduit</span><span class="cost" id="cost-datanode">600 gold</span></button>
+    <button class="btn" id="btn-brewery"><span class="btn-label">🍺 Potion Brewery</span><span class="cost" id="cost-brewery">800g+20c</span></button>
+    <button class="btn" id="btn-lab2"><span class="btn-label">🔬 Research Hall</span><span class="cost" id="cost-lab2">1200g+30c</span></button>
+    <div class="sink-section-label">— UPGRADES —</div>
+    <button class="btn" id="btn-goo-bank"><span class="btn-label">🏦 Gold Vault +1</span><span class="cost" id="cost-goo-bank">gold</span></button>
+    <button class="btn" id="btn-goo-turbo"><span class="btn-label">⚡ Turbo Forges</span><span class="cost" id="cost-goo-turbo">gold+crystal</span></button>
+    <button class="btn" id="btn-goo-feast"><span class="btn-label">🍖 Grand Feast</span><span class="cost" id="cost-goo-feast">gold</span></button>
+    <div class="sink-section-label">— PRESTIGE —</div>
+    <button class="btn" id="btn-relic-unlock"><span class="btn-label locked">🏛 Relic Vault</span><span class="cost cost-relic" id="cost-relic-unlock">locked</span></button>
+    <button class="btn" id="btn-prestige"><span class="btn-label">✨ Guild Prestige</span><span class="cost" id="cost-prestige" style="color:var(--purple)">–</span></button>
+    <button class="btn" id="btn-save" style="border-color:#1a4a3a;color:#4ad0a0;"><span class="btn-label">💾 Save Game</span><span class="cost" id="last-save" style="color:#4ad0a0">now</span></button>
+  </div>
+  <!-- PARTY tab -->
+  <div class="tab-panel" id="tab-party">
+    <button class="btn" id="btn-worker"><span class="btn-label">＋ Recruit Warrior</span><span class="cost" id="cost-worker">100 gold</span></button>
+    <button class="btn" id="btn-researcher"><span class="btn-label">🔬 Recruit Mage</span><span class="cost" id="cost-researcher">150 gold+mana</span></button>
+    <button class="btn" id="btn-miner"><span class="btn-label">⛏ Recruit Rogue</span><span class="cost" id="cost-miner">200 gold</span></button>
+    <button class="btn" id="btn-guardian"><span class="btn-label">🛡 Recruit Paladin</span><span class="cost" id="cost-guardian">gold+crystal</span></button>
+    <button class="btn" id="btn-intel"><span class="btn-label">🧠 Guild Training</span><span class="cost" id="cost-intel">200 gold</span></button>
+    <hr class="divider">
+    <div class="sink-section-label">— HERO FUSION —</div>
+    <button class="btn" id="btn-merge-open" onclick="openMergeModal()" style="border-color:#2244aa;color:var(--blue);"><span class="btn-label">🔀 Hero Ascension</span><span class="cost" id="cost-merge" style="color:#88aaff">10 same class</span></button>
+    <hr class="divider">
+    <div class="stat-row"><span>Total Party</span><span class="stat-val" id="s-pop2">0</span></div>
+    <div class="stat-row"><span>Champions</span><span class="stat-val" style="color:var(--gold)" id="s-angel">0</span></div>
+    <div class="stat-row"><span>Gold/sec</span><span class="stat-val" id="s-goorate">0</span></div>
+  </div>
+  <!-- RESEARCH tab -->
+  <div class="tab-panel" id="tab-research"><div id="research-buttons"></div></div>
+  <!-- DEFENSE / GUILD tab -->
+  <div class="tab-panel" id="tab-defense">
+    <button class="btn" id="btn-wall"><span class="btn-label">🧱 Upgrade Walls</span><span class="cost" id="cost-wall">gold+crystal</span></button>
+    <button class="btn" id="btn-tower"><span class="btn-label">🗼 Defense Tower</span><span class="cost" id="cost-tower">gold+crystal</span></button>
+    <hr class="divider">
+    <div class="stat-row"><span>Wall Level</span><span class="stat-val" id="s-wall">0</span></div>
+    <div class="stat-row"><span>Towers</span><span class="stat-val" id="s-towers">0</span></div>
+    <div class="stat-row"><span>Paladins</span><span class="stat-val" id="s-guardians">0</span></div>
+    <div class="stat-row"><span>Defense Power</span><span class="stat-val" id="s-defense">0</span></div>
+    <div class="stat-row"><span>Waves Survived</span><span class="stat-val" id="s-raids">0</span></div>
+    <hr class="divider">
+    <div style="font-family:var(--font);font-size:5px;color:#ff6644;margin-bottom:4px;letter-spacing:1px;">🔴 DAMAGED BUILDINGS</div>
+    <div id="damaged-buildings"><div style="font-family:var(--font);font-size:5px;color:#446677;padding:2px">All operational ✓</div></div>
+  </div>
+</div>
+
+<div id="messages"></div>
+<div id="wave-ui">
+  <div id="wave-label">⚔ BOSS WAVE</div>
+  <div id="wave-number">WAVE 0</div>
+  <div id="wave-timer-row">
+    <div id="wave-timer-txt">Next: <span id="wave-timer-val">--</span></div>
+    <div id="wave-enemy-count">Enemies: <span id="wave-enemy-val">0</span></div>
+  </div>
+  <div id="wave-progress-bar"><div id="wave-progress-fill" style="width:0%"></div></div>
+</div>
+<div id="event-banner"><h3 id="event-title">Event!</h3><p id="event-desc">Something is happening...</p></div>
+<div id="difficulty-badge"></div>
+<div id="boss-overlay">
+  <h2 id="boss-overlay-title">⚠ BOSS WAVE ⚠</h2>
+  <div class="boss-name" id="boss-overlay-name">THE VOID KING</div>
+  <div class="boss-sub" id="boss-overlay-sub">A massive entity approaches...<br>All defenses to maximum!</div>
+</div>
+<div id="raid-modal">
+  <h3 id="raid-modal-title">⚔ WAVE RESULT</h3>
+  <div id="raid-modal-results"></div>
+  <button id="raid-modal-close">— UNDERSTOOD —</button>
+</div>
+<div id="offline-popup">
+  <h3>🌙 WELCOME BACK</h3>
+  <div id="offline-results"></div>
+  <button id="offline-close-btn">CONTINUE</button>
+</div>
+<div id="prestige-modal">
+  <h2>✨ GUILD PRESTIGE ✨</h2>
+  <p id="prestige-desc">Reset your guild to gain permanent bonuses?</p>
+  <div class="prestige-pts" id="prestige-pts-preview">+0 pts</div>
+  <div id="prestige-bonuses"></div><br>
+  <button class="prestige-btn confirm" id="prestige-confirm">CONFIRM PRESTIGE</button>
+  <button class="prestige-btn cancel" id="prestige-cancel">CANCEL</button>
+</div>
+<div id="merge-modal">
+  <h2>🔀 HERO ASCENSION</h2>
+  <p>Fuse 10 identical heroes into a Champion.<br>Champions gain 5× stats and special abilities!</p>
+  <div id="merge-grid-container" class="merge-grid"></div><br>
+  <button class="merge-btn cancel" onclick="closeMergeModal()">✕ CLOSE</button>
+</div>
+<div id="tips-modal">
+  <h3>💡 TIPS & GUIDE</h3>
+  <div id="tips-content"></div>
+  <button id="tips-modal-close" onclick="closeTipsModal()">— GOT IT —</button>
+</div>
+
+<!-- INVENTORY MODAL -->
+<div id="inv-modal-backdrop">
+  <div id="inv-modal">
+    <div id="inv-modal-hdr">
+      <span id="inv-modal-title">BAG <span class="inv-nav-count" id="inv-count-badge">0</span></span>
+      <button class="inv-modal-close" onclick="closeInvModal()">✕</button>
+    </div>
+    <div class="inv-tab-bar">
+      <button class="inv-tab active" data-inv-tab="weapons" onclick="switchInvTab('weapons',this)">⚔ WEAPONS</button>
+      <button class="inv-tab" data-inv-tab="armor" onclick="switchInvTab('armor',this)">🛡 ARMOR</button>
+    </div>
+    <div id="inv-body">
+      <div id="inv-grid-view">
+        <div id="inv-weapon-list" class="inv-grid"></div>
+        <div id="inv-armor-list" class="inv-grid" style="display:none"></div>
+      </div>
+      <div id="inv-detail">
+        <button id="inv-detail-back" onclick="closeInvDetail()">← BACK</button>
+        <div id="inv-detail-card"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<button id="inv-nav-btn" onclick="openInvModal()" title="BAG" style="position:fixed;top:8px;right:36px;">
+  <canvas id="bag-icon-canvas" width="16" height="16" style="width:16px;height:16px;image-rendering:pixelated;display:block;"></canvas>
+  <span class="inv-nav-count" id="inv-nav-count" style="position:absolute;top:-4px;right:-4px;">0</span>
+</button>
+
+<button id="tips-btn" onclick="openTipsModal()">?</button>
+<div id="enemy-hud"><div class="ehud-header">⚔ ENEMIES</div><div id="ehud-list"></div><div class="ehud-count-line" id="ehud-count" style="font-family:var(--font);font-size:4px;color:#ff8844;text-align:right;margin-top:2px;"></div></div>
+<div id="hero-stat-popup">
+  <button class="ssp-close" onclick="closeHeroPopup()">✕</button>
+  <div class="ssp-header">
+    <canvas class="ssp-portrait" id="ssp-canvas" width="36" height="64"></canvas>
+    <div class="ssp-title-block">
+      <div class="ssp-title" id="ssp-name">Hero</div>
+      <div class="ssp-type" id="ssp-type">Warrior</div>
+    </div>
+  </div>
+  <hr class="ssp-divider">
+  <div class="ssp-stat-grid" id="ssp-stats"></div>
+  <div id="ssp-weapon-slot"></div>
+  <div class="ssp-grow-row">
+    <span class="ssp-grow-cost" id="ssp-grow-cost"></span>
+    <button class="ssp-grow-btn" id="ssp-grow-btn">▲ LEVEL UP</button>
+  </div>
+</div>
+<div id="hero-bar"><div id="hero-bar-label">PARTY</div></div>
+<div id="evo-log"></div>
+<canvas id="gameCanvas" style="touch-action:none;"></canvas>
+
+<script>
+'use strict';
+// =============================================
+//  BLADE IDLE — MMORPG Farming & Boss Waves
+//  Based on Goo Slime v10, remade with Swordsman
+// =============================================
+
+const TICK_MS = 100;
+const SAVE_KEY = 'bladeIdle_v1';
+const MAX_PARTY_BASE = 80;
+function MAX_PARTY() { return MAX_PARTY_BASE + (G && G.upgrades ? (G.upgrades.gooReservoir||0)*10 : 0); }
+
+// Hero class identifiers (replacing slime types)
+const T = {
+  BASIC:'warrior', WORKER:'warrior', FACTORY:'rogue',
+  DATA:'mage', AI:'archmage', CHAOS:'berserker', REALITY:'ranger',
+  RESEARCHER:'mage', MINER:'rogue', GUARDIAN:'paladin', MYSTIC:'champion'
+};
+
+// Hero class colors
+const TYPE_COL = {
+  warrior:   {body:'#4488cc',dark:'#224466',light:'#88ccff',outline:'#112233',eye:'#ffffff',eyeshine:'#44ccff',glow:'rgba(60,130,210,0.3)',accent:'#aaddff'},
+  rogue:     {body:'#554422',dark:'#332211',light:'#887755',outline:'#110e06',eye:'#ffffff',eyeshine:'#ffee44',glow:'rgba(100,80,30,0.3)',accent:'#ccbb77'},
+  mage:      {body:'#7744cc',dark:'#441188',light:'#aa77ff',outline:'#1a0044',eye:'#ffffff',eyeshine:'#ee66ff',glow:'rgba(130,60,220,0.4)',accent:'#ddaaff'},
+  archmage:  {body:'#440088',dark:'#220044',light:'#8844cc',outline:'#0a0022',eye:'#ffffff',eyeshine:'#ff44ff',glow:'rgba(100,0,200,0.5)',accent:'#ff88ff'},
+  berserker: {body:'#cc3322',dark:'#771111',light:'#ff6655',outline:'#220000',eye:'#ffffff',eyeshine:'#ffbb99',glow:'rgba(210,40,30,0.4)',accent:'#ff7755'},
+  ranger:    {body:'#338844',dark:'#1a4422',light:'#66bb77',outline:'#0a1a0a',eye:'#ffffff',eyeshine:'#88ff99',glow:'rgba(40,130,60,0.3)',accent:'#aaffbb'},
+  paladin:   {body:'#aaaa33',dark:'#666600',light:'#ffff66',outline:'#1a1a00',eye:'#ffffff',eyeshine:'#ffff00',glow:'rgba(200,200,30,0.4)',accent:'#ffffaa'},
+  champion:  {body:'#cc8800',dark:'#774400',light:'#ffcc44',outline:'#220a00',eye:'#ffffff',eyeshine:'#ffee00',glow:'rgba(220,130,0,0.6)',accent:'#ffdd55'},
+  legend:    {body:'#ff5500',dark:'#882200',light:'#ffaa44',outline:'#330800',eye:'#ffffff',eyeshine:'#ffdd00',glow:'rgba(255,80,0,0.8)',accent:'#ffcc44'},
+  mystic:    {body:'#cc44ff',dark:'#660088',light:'#ee99ff',outline:'#220033',eye:'#ffffff',eyeshine:'#ffffff',glow:'rgba(180,0,255,0.9)',accent:'#ff88ff'}
+};
+
+// =============================================
+//  SPRITE SHEET DATA (Swordsman Lvl1)
+// =============================================
+
+//  SPRITE SHEET DATA (External files)
+// Embedded sprite data URIs (swordsman lvl1 sprites from craftpix asset pack)
+const _SPRITE_DATA = {
+  idle:   "data:image/png;base64,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",
+  walk:   "data:image/png;base64,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",
+  attack: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAABACAYAAABsv8+/AAASI0lEQVR4nO3de1BUV57A8W/zEgyIYQR5CQFaiQaUXV8QJWoSNgwm60SDbhJr85px13Iyu5VRtwxlqjKpmFp1kqq4M2aNs3FSJgYTtPKQmEXyMlESdSsqMTFpQFRQHkMkiCiId//Ac73ddCso0H0vv88/0g/0nnN/v/M759zbLQghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCFEH6uu/1nz9jEI0Vs2bx+AEEmx8frgWVV7UmJSmIYq/IlRwwZd3FbX/6wNxnZbiZw8L5Gi5ywpNl5bNPcxNmx7TfpDmEJvir8x30FyXvgGrwWhJIRz0YPB0Qeu5125Z/IdANTUN1Be/Z2l+kK12dimpNh4zUptvBZ3fWBm17PyV/lefaKCj/Z9DpizP65n5S/jvW/2gVcPwCoJ0VOuAaCKHliz8Bmpti+a+5j+XPWJCrfvtVJfqBgHnCZ6ViuIV2O1PDde779aIbxavoO14rwnrBYH18PX+mBA/+HBmhCuxW8wFD5PpqVN1NJTUp2eq6lvIC4qsttzVumLpNh4LTZiJPfOzHNKfCtf8jDmupXyvCfFf7BOdl0N1vHeyNf7IGAg/pGeJoShCFhme9S4Avzg02JU8aupbwCc2mzJ9hslxcZrqggqqh8SR6VQfaJC/xMgLXEsmLgvjHFffaJCb5caBDwVBbMzxvxgyXMj1aYN217ThgYNIXvCVLf57vLY5/uip1v/g3m8V8zSBwO+A3CthADvz4r6mmr3wnsfovpEhd722ydm6o+NPwOWan9WZo52+vh3eiEE2H3wK/31hfc+xJ4DZUBXn6ifm1qaqG2qM2U/uCuCNfUNNLU0YdwBsWKsL5r7GJs/eNNyed7TrX9w3uq9Wr4Dlsx5GLzjvZGv98GA7ABA7xICzL/6c2Us/pWnKp2KnqL6pamlyRuH2O/UNXA1GYKu4rjnQBlNLU2cOXuGpk+biAiL8OZh9omq2pO2Ddte0wBiI0YSERbhdN7VIODtFUBfU+1eNPcxp0mdFfM8KzNHnxDsLStxusHTONZ5yncwT8739sa/wT7egzn6YMAuAVgtIXpKbQVt2PYaQ4OGAJA9YapT0RseOtxtX1jJ6r1H+GrzG1S/9UeOtGhs/uDNbu9Zt2g6T274wgtH13+GBg0h1tbMkVNnSI5JZs+BMqdBIC4q0lKTAJXrew6UWSrPXVf/qvjP/u0yUrMzeXHBPG1vWYmtN/nubiVoBYN5vFfM0gf9PgEY7AmhBvT8dLu2+MFpPLnhCz0gAIpfnk3e73YAEBEWYblEgK7V0YsL5mnT7psLwIo5U4gdGaS/XlvX3u137rBH8rmjYcCOsT9U1Z60Gc+7OuccuPIes9zz0JsVoJrcWTnP95aV2LIyc7TU7Ez2rP8LTxUW6ZMA9Z78dLt2pEVzynd3k1xfz/nenPvBPt6Dufqg3ycAxsHMXUIYC6Di6wlxoypPVbJizhQAKsqb9efTRvrzeYu3jqr/xd16G9XAkxu3AFBU8Ai1de3643W/fpB1i6ZTW9dO9l2ROAoc1HrxePtKSlo4xS/P1h+reB8eOhwwzyrI05a3q3FhNqxQ+DzJyszR9paV2NTEdv6ylexZ/xfmL1sJa9Bc+0blu3HSC5fz3eSTXFfXGu+tFAeemKnm+XnjH1UJsWLOlG4F0GrBYDTv+b+ybtF0VsyZwpMbt/Dkxi3U1rWzbtF0zpw9w78+PoY77NacFe8tK7FtXfMcuyodjJnxEuMfKQcgdmSQ/lhNBLLvutIHvrga7q2K8manOF+3aLp+zs1w6ce4/T37t8t4qrCIrMwczTghUIznS+X5ukXTnd5jtjx33f43FngV1wmTJ3Ko+EMyZ+Y5TZRWzJlCbUOFnuvAoMh3I6vEwY3w1Zo34BOAwVoAVeFLSQt3W/SMK0Sz3vneE3cn2wm+JYd1vx9BSlo4KWnh+uOigkeAroK5tKCYtw87LNUHFeXN7C5tcLrk0dTSxH+tGGuagTA1O5OvNr/BtPvmMn/ZSo8TAasWPndtVZOA4ZFRnGmod5oEuMt1cM53sG7OWzUOesOXa96AfQpASUkLB5oZM+Mlgm/J4cmNaRQVPGKZhPC0TXp3sp36W3KADV1F72RX0WuMv1L0auvacVQ4TNnunthbVmLLT7drr+dugG8hMjqIhtPtqMeNwKZXSqnvaGfnqXrL9MG85//q8XKH2g410z0PcbfeBsDxfQe49bZJDI+MAtDgSsyrwmfMcbBu4bvcbi1zZh5nGuqJb60CIPPuyG65Dl35rmK91hZkiT5wZ7DFgTu+XPMGfAIQGR0EuC+AJV/X4ahwUNt03tTBYLwzGK4Miq/nbnBb9AC97VZb9bpqafyZpQXFrH0+j4bTV1bCakBMGzWUHzsiGX3zWA3gxyOfmbo/ruz8VOFuEFi3aDq7SxtMF/db1zwHgCp4ThOB1qqrFr6Sr+uo+b9ywjraqbLQRE9NAuJbq1j7fB5LC4qdcj08LRzoHusVZ4cxeniKZsZYv9Z9IdeKA7PF/fXw5Zo34BMANegbk8I4KLRYYFAwbpPG3XobrEE7CXrhU9S1oI3vfE1HRwchzefJjYnSrLT6NRo9bob2UEo9p5s6WVpQTGBgoP5aQGMLd08I4/sH1pEal8Sv/i6Zf8+e6b2D7SNq5ycyehPuBgGzxf3J/d+wdc1zxsFegysTAbXy9VT4VHvNOtG72s2P6vX8dLtWUd7MnDsnu835Ta+UWirWPS14wHMcrN/yJSHN500T9zfCU83zhT4Y0AnA24cdNgqKNdeEMPugYKTuDAaYv2yl0zZp2afF3QofwJEJ0xhfutMS7b+aH498ZnuOGVr+f6zku2eeIODOmfiHBxIY7c/5HceJf+B3FG98GYDWvzWT4V9DRrpdM/OuyNuHHbZ8fqU15HbF/Ou5G6go7Jr4WSXujSvfxQ9O4182H3Nb+Da+87XpJ3rqEwBXe8/leNUA7Cn2bjl/JPHvu8X6L/45nYw3ajTD75uGuwUPwNtlJW7He1X4zB73PeGp5vlKH3ilw/PT7Zqn1V9EXBJjLw8KZg8ItT2mVkf7dr2J/9RsAmLDCIz2p+N0JwC3bXvfku33ZPS4GdovLtVytq2d0MX3cTHyJ87/4QsCEiaAPQr/8EDWRJ27fO0MU98QOHrcDG1lSj3vH+voNvEzS9wb74L/p3+cx/xlK/VdAGNBzE+3a3PunAzAsyW1ZPjX6H9HYGAgR++YSeeBGvJ+7Vz8/GJCOFq606fabNSbrwB2lZ9u1wBOdNg4nzUD//BALmwvdor1wGh/Vl1q8dl4v9b3AKhxTi14zjTU6wsegPjWKo+7fca4z/Cv8al29yVfrXkDfgkA4JvOOPyiQrg5x07H6U46D9R0mxH72iB4PVy3SQE6v9pNyOWiF8jNnF3/PofcrAis0H5PfjzymW1IYqIG4L+jjrPHvyY0JIi6Y4fhGASNSWV9vYPFD07TB0WzMu56vPfMEwTcmYN/eNdAYJa4T4waZjMWwfhJGfprxkmAceWb4d+V50NajwEw5P4cAIJnJ1C88WX8J8YRGO1PMFA4zo+l9Q5T7/R4otqUlpiohe79DB69hwtAcMN3nD1+kDb7WMaXOlgPpo13fZxb43w5SO18ntzxJzo6OjgUZSckIR4c9d3i/r8X3kJK2gQoKLZ0HKTelauFpie5zX2/mBA4MrDH5bWOTr0rVxvRHkbz5cH/fORYfVD4qcTh0yuC65WWmKiFhgRxtq2d8IQpetuBQdF+o6RRSVrkLZNYuOJpCl9YRe2x/TybEczppk4+rjzDzlP1NrV6MvOAkJWZo8W3VvFNZxxq12PI/XkERvtzdv37BCRMoC2ondD0JDqbO2g7ftInz/3VdgE8/Y5x9eva7tCQIH6KS2Fl2s3EjgwiJS3c51a+Rq7tv9ZlAHfSEhO18IQpdDZ8o/dHU9FOAKpOVPlsvPf2/wEw7nye3PEn/VLQguUf0pF7t9MOCMDo/Z8y587JpoiDG5GfbtcORdkJTU/S+0Dl/pqoc6zf8uWAt9srXwSUlZmjhbeHsWDF04QnTKGu9SLNxw7zD8eqWHWphfH1Dm8cVr+Lb2+jrvUiQxOmOLVdtT+5tITCcX7877+N0QdPK8qNidKybR2kLVlO4QuryPjjGmat2cqugy1ER/jr73v7sMNm5oEgKzNHy5yZR+iUfDL8azjb1nUzUGC0P/476oCulWD7D0dJLi3h3fuH+uy5dy0Axl0AxfUz8ur8qXYHH2jUL3vVtV6k/YejvPvxPsD5GzF93fUUf0DPe//IDFov+dFUtJNsWweLEwLJjYnSzB7vivqWRHUJALrO79m2doIPdH3uKbjhO5p3ldK8q5T9Zzp59+N9ptz96Kn8dLtmT7EDXXkQGhLExeMH9dwHWPt83oDn/oBOANSXhmTOzONSnR+FL6wieuIDpF5sZdJwf1Y+nWbpIABIvdiqF77UJcuZuvDPZNs6eDYjGFAfGbG+I8HTOHewkdQly2mr7Pr8e/vDr7LroDW+C1nFuboeevKmJMqrq22tl/y4tKPOaQKozr2vF0E1CXjrvSJeXDBP/yIg9bqnwlheXW1TxS/4QCOtl/yYtWYr2bYOJg/zY9MrpV5Z/Qy0CMdnFL6wilHTH2fWmq1MXfhn2h9+lfIT57x9aP1CXRZaWlDM+i1fdlv4qBhYnBCofzzYaqt/VfPiZy/BUeFALXzVJFDlvrfq3oB0tLubRA7vriQyJYughGEABO1ZpW8VWS0IlNyYKK0xbBaJeXMJDBmmPx/0xm9IGzWUjyvPEDai63krtl+ZNGaBFpmSBUB4RipDJ4zg3MGulcHQCSM49Mxa9v9QaNr2Z2XmaPOXreRQ8Yf6zVB7y0psuTFRWlRgEO0Pv8qJL/6H1CXLOXewUT//+36+BPj2uXfdCr/8n+Bcc1WcGxOltdhncKHOD/u8R/VzHvTGb4CuCaGvn/MbuRkQruQ/gH3eo/rzqi8cRZt8tg96exnAk2nZ+VrqkuX64+aySm7a9nvLffmX6w3gAMMjo9i9rYwhIy+h+uDi8vu9mvv9vgOQlZmjPVVYxLT75lLz/bckTJ7I99/u11+v+eQjANpvf9qSM0AjY4A7ijYBXckfsHo75SfO0Rg2y/Tb3j0VnpEKQPM3Rzn0zFqgqy/MTsX78X0HGJ/3S734q9ePBE+jrekUo6Y/rk961CowrGALVRcmeu3Ye8JYBNROQE9dqPMjMW8ujqJN+jkPWL2dgNXbGf+HpUwas8DnLn30pcawWcTNuoe4Wfc45b/xTyubNGaBNmLcLzn0zFqayyppLuv6z3ECVm8n9qUdljj/asU/f9lKjDuA33+7X/9UxKjpj/O3Tw5z7mCjnvstjT97JfcH5BLA0d1lTF34MF++v83pxqGghGFEpmRR88lHBITcZIoBsC8EhgzTB0JVBMLe+eIav2UNk8Ys0NTqJzwjlYaKvez/odCmBsSQZPN+N7gq/kd3l3H74ie63SRnnAC2NZ2irekUjqJNOIo2EbB6OwBTN/+nzw+ErpMAcP8d+Uaq7Sr2XScCIcmRhIYcIjk6xmfbbmy3cTegN0IiYgD0SYBZ2t8Xq3+AgJCbiJt1D9XF26gu3kZ4ZjJg7rxXPC121SLAOBaERMTQ1nQKuDIB8oZ+X2m6u0aYHB2jRQ0PBeBcWwdnL1wgYeRw/XeO152h8vQpy62C3bUbGBRtB/ftV21Njo7RzN4PWZk5muFb0bpti1ut/b25M1617/yFi27bnna5AJRXNvh0u6/3MoAV2n8jlwE8xb4Z494T1/wH5/tifHH891pHG2e6KhCMj71zVP3vau1Wzw38UQ2cq51ns8eAcbL71ntFbguE1drf20mA+tlT283Q7huZBKifzdz+6+Wp/WaMe3d6ckOsu/Hem+03bWcL4Ytct4b7auvU193oDXJmo9o7GNrqqq9uCBTeJydRiH7Q02vEVhpIr9ZmK7VTGcyTAGENErhCiH7RmxvlzFpEB/MkQHYChBBCDHrX+6kAIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgjhW/4fH+FVNeXIdOEAAAAASUVORK5CYII=",
+  death:  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAcAAAABACAYAAACN4qcfAAAP+klEQVR4nO3cfXAUdZrA8W8ymckLeR2STN5ImLxCCAQkIYT3W81Gw6onL1qreKBoTm4XytvF81h0S3fx5VxurUu2ziOmTu9qLc51UUvLnApcHbICgrhEwkswLxsgCXkb8j7kjb4/hm5mkuide+alO8+naqrSPd2VftKZfuZ5fr9uEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgiN10T8UntMnOK+XNtweUKOQwghxNTlPRG/VE14hWseIj97BfaYOGV4UjQSo8cnhBB6NG6V1/AEkJ+9wuP9+uYWKurO6b4adI9TjcUeE6cUrnmIkrdf0318QghhFD5j/QvUhFC45iFtXd2l6hHbxUZGqD8qek8S+dkrSJiRRMnbr2mx1F2qJj97BR+d+EQBafsKIcREG/MEqF7oS95+TQmw+LI8M4f65hbAI+kNX9ZtEqxtuOz10YlPlPwby/aYOCXGatPez0iYrf6o2xiFEMIIxuUCrLYA6y5Va8lvycLF2rL6M6C9r9d2qJrwrEFWLaGPlvCN0vIdjT0mTpK7EGLSG5cWqHvyq2msYcMP7ufIyWMjtlUThaPLMdaHNSbcY4XRE5/KCNXuaNzGOw0VlxDCeMZ0Fqg6/lfy9mscLv+MmsYalmfmcOTkMRxdDmoaa3B0OUZNhnrjHivA4fLPWLJwMUsWLgZcyTBhRtKI/TISZo+YIGQEw+MyYozfZG20fUrFK4QejWkCrG247KW+0oNcxYBaBbZ3t1NWtJr27nYcXQ7dV3/usX504hMt0R85eUyLzZ3e43WnJjd7TJySn71ixCQntSqcKklwbbRdyc/Nm7JJcJctTdllS5uSsQt9GfMW6HA1jTXsuHsRANUVHdr6DJuJT6pGJgo9yprux+HyzzzWhQaGcuTkMWIjI0ZNiHrl3vLMSJhNfXOL1t69MeHHoy0sjMU90T3VVKm1vGfbZ7ELFPd1U8HwLz37GmunVPx6e8jJuCbA4sJlNDT1s7V0r2v5kR9SXLiMrSV/4LGHl8K/YpgkWFy4jKSMEG25YNsHI7YxQvUHN2/xUKt71fBJP1PB2mi74utjBiA+Mp61oOxrrPVaG21XjHoxnG2fBeCR8Lp7OpkRGcMuUMAzORqZeq7zc/Nobr0CN+I36rkfrrbhspf7XIjJftvXuD4JJikjhBibhdSVLzNvY4WWCMuKVnts1+BomrR/sG/j8MEWDh9sobqig+LCZVq7N8NmMkzyg5vJTZ3gNDwJqtVfjNVm6DaoeuGzWaPVi5/HeiO2RJ9qqvQ6V3ue7p5OV9VnS1NmRMZo71uDwrAGhWHklujaaLvi/lqQMlc7/wtS5rq+CBnw3KvUJ12pL/dhkPzsFZN6nsO4VoARURYgBL/LeRT/NJzWuI2AqxW6/3gTVdVVNDiuGSL5NTT1c6bu6o2lMGJsFq0CXn5rhGGq3RvnSvvnrrtUTWJ0IjWNNaPOfp1q4iPjmZ2U5pEQjURNbD1OJwDuyQ9gmr//zW1JM1RLVE1q+bl52rrRzvP0kBDgZjdg3A5wjBnhISfjmgBbrvQD8O+3l8AZCMkI0ZJf/RcVdA30U9vYPKn+QH+uGJuFraUfasvFj/yQGJvFlfyA+i8qCBrop9LLYoiEr1Z99c0tWnWrjgdOhfan+zf/Jkejtt518YO2jo6v21W3dtnSFLX92d3TSWNbE8EBwYBn4nNfNlIS1JLZ0f2Kr4+ZdPss7Tyr511lxCRohIecjFsL9K3TVV7bd5Z5rHNPfhkzApgxI5aU9JVKSvrKSVkufxtJGSHM21jBoS+vsG/nRmJsFsAV89M/fluL1yc0Cb3HmzXdj+LCZZQVrdZm+AKGmN37bbR1dHC29jyrsld5JEG1KrAGhRmmFaZWfmr7s7GtiejpNmzhrhe4qsLAacEe+xmtHaq2t92T3+ykNMD1/xAZHuWxvdHaoep4n3vy+6ZbvyZbO3RcK8C3Tld5sbNMMZvNNw+gtYvbMoM4v66YtFg7f7kgkceXrxrPwxoTEVEWj0oXXMnv9X85aMh4wTXmuePuRVqy31ryB9q727lrfgrvNbYTGhg6sQc4Tppbr2CzRtPkaBxRCRiFexW3CxRrUBg9Tic9Tid9A334mn1H3a9voG/cjnGsuU92aevooMnRyKrsVZyrrhyxrZocu51d432YY8YIDzkZ1wSYkr5S8e+o5sLf3M7AlSHMUSaufXCRuHXbKCstAqCnrYOvzh6aNCXyn+Ot01VebH5X2f1cgbauuqKD0t8f52zCLSPinW+q56uJOtjvyGhjngA77l6kjXnWf1FBkNKPz42KV+/neTi16mvr6NAudEZsfQ4X4WeipesqPiaTtk5Ngk2tTUzz99fGCI1CreI+OrofddZvun0W56or6XZ20ePsZpp/IOeqKw35Jcj9wR8BFteXHfeHnLR3t3vc+jVZjVsCzF2cp7R29vNZSgbhHzTBahvdr7xPoL+FstIifn1HGABbDvbD2fE6qrGjVrvqstls5mzmUgb/az9lpUU4Lf3Ma65iy4alJGVkws4y5a3TVbpNCDE2C2fqYE5CGFtL92q3uKi3gqhtbu9nD7H1RtW7fm6yrmN2lxxkYfODWTxTckJLhNP8A7X3jfTNfzQrM+IICbN4rCs7UuexbKTqz30c78nUNOWSU9GqQIBnCrN5puSExz5G+h9wH8dbPzdZOduleNwGVVa0esStX5Ot+oNxSoC5i/OUxasKaG9p5syFKu7b8TPefOF5eq5709MzyJbp53ll73V2P1fAvL2fMrKBoE/uF/e0W29X1GkBfi3nGHT2cyFnOa/s/XTEtnqUlBHC2uf+DYB9Ozdq64e3fcue/Vt62jo48GImEVHZsPld3SfBJ1PTlDtWpAOuC19wmJnOqwM8U3KCHmc3ixJjOe7o9kiIRtRY76ryAgJcleDS2dF8eq6RqGA/rnRem8hDGxdNjkbW5aRhDfWhoa5XW58Q6s2ZRuN3AtSHnMTYLLp5yMmYT4LJXZyn3PvE07S3NBMaEcn1Jm/efOF50n70d+Rs+GeWew0QZXV9YLbvLNN9IhhN7uI8BcAUYiZwy510O12zYTuPfkpXa6chYo6IsnBq7zZO7d1GUkaIVvmV/v44Xybc4kp+pUWYFsayZ8NMtu8sY+Pmdw0Ru0q96HVeHdDWrctJo+C2GBYlxhLVe5VYZZD1yUuV9clLJ81EgO9Cb+8Qju4+HN199PYOaesXJEQyJy2UqGA/j+13x61Udsfpe/KXu3U5aSxKjOViSzeO9kEACvPn0OPspuC2GOZEe7ZBN9lXK5vsqw0T/467F3HX/BTO1F2locl1fVPvfX7s4VRWJHu2QbNS71OyUu+b8PjHNAHmLs5TfvLmPi6eOMm8gjs49t+uWaBRC9fRW94KQP8Dr3Kg3NUaMNLFMHdxnqK+7n3iaZbMXED36VoGrgwREr+IQH9Xu+h7iaHcHh054f8I/x9vna7y2rj5XY916phn5YpVDF4s15LfYEMXWw428Xn7EHfONDMZPgTfBUf7II72QcoONFBR3klDXS+F+XPIyHTNgmyr/hMJ4b5k/mQ3j774POCqHCfymL9LatVnDfTl0/NVWhKMjvW8HaLnWi94e2PNyiTyezkYJQlaQ13NtPiIQPZ8fEhLgs8UZnts5+i6Ct4+zHzgHlJ/ugmjJEF1zF8dAlGT4GgPOcFkZt4vtpPz23+Y8M//mLVA1eT32W/fID57Ib/71S85emy/lxpw1b7XSV67iYDMcMh8h9qf7waqxupwxoVa6QGs/vETtFWcob2lmS/L/pPQiEisZ4YYOtmqtYBz7nmYijceJdJsITEqWgGoudKoyy8Bw8c8Ab6MTMavoQvfewroe6cMv5Zz9Dn76b/uzZZ4MwfKu5j30nb4OYqj8xNAv/FbQ3049VW7dgH86++v1FphBz88xXy7P5eXPMbne0u51tVL8eMpvFzUql0Au5wVAOy7UqfL+EPCLOz/wjV4kXdLmra+42o/F85exnn9Ok7fMLx9Q7g+0MVgm6slas3KZDcofQOusbOdTRd0GX9MQgAv/O4gADvuvVVbr57/jsFB2gPj8Z7mz3VnM321nQDMfOAeNr2Bovfz/78NgTQP9NMcNhuf0EAGuy5qBdC8X0zs539MxwArDx8jZ8MD/Pq+tRw9tl8LzOwfTELBGqr2vc68zO34J07eWUL/V2rCrzx8jLaKM3zwm1+N2Eb9G5hBiVq4DgCfl96h41gNkR8+hZ+vD4Ci1yRweZrdY9naM4SDVmhrxQyYIubT86fPWe41QMUlV5uwt7yV2L/Ix+fQF7qO/+sugB8fqeRSRDLhS+7k84/fxzt5Oj8KCeTloqOkBHhhaT1L78INmCqqMZu9WUuCoseLoF+AN+tuneuxTk1+YYE+WBcWMCc8mKPvvU/WdBP1VYcYZKVr32AbXl2t+Ji8eM6WqugxCQaHmSl+4k6PdWrySwj3xev+F/lBYhSv/v3PuD/RzKlDxfSxFYCQ6FmYmvR9/tUhEHdq8hs++e3Z+X4ceONRennVtW9SLj61E/P5H7Nf5F4NqRf+xKhoJTLUNRGg1zlAd18f8bZQbZ+LTe26rQBg9Ji/TlbqfUpCwRrM/jdvFD7+2sOAPqsg9y8AqraKMwDa5KcNNyrf8PQ78PGfhtk/mAFnp7b9H//jcUCf8T+ZmqZsfjBLW26o6+XjI5VcjE7BZPXnelUb/eZBZrY3AGDpdbWIBldu1fa5cPCfAH1WAXsS0pXc7ARtWU1+sdPNtNuXcfF8BYN9/XgFmEgb6iTA14v6tgEG7LnaPm3VRwB9VoGjnX+Pyv/j97nW1Yu31UJefyNhQd6cqnXSl/uItk/14RJAn+d//dzkEbd9eUx+Ky2ip60D72h/Nl+rIcpq4kB5Fz1r/lHbZyI+/+P+h1ZbfeAKdPjyeB/PRBre//78wpu6jt/9C8BovM2h9DV9/bCz3uMfPqbX6hdFt9/NeE0NF+lTvAmypI66/+u1H+g6/j0J6R7xd1isxM/K4OL5CoZMQ5h8/fCaZiG4/hI+/UNcNXk+JWX7ZX3fFzr8/DdMiyfr+67Kv988iDkoGJPVn6jyP2Lp7eeSOd1jf72f//Vzkz3i/yo0nYJHtmm3fflND8cnJojEg/vx77jGWb+lHvvr/fMvhBAeXkpZpl0U9ySkK1+uu0O58FerleHJ0qgeXHDzS+GTqWnKhV8+oFz5zSbFSBOgvsn85Xdpca6fm6zUvbdN6T2+XRmeLIUQwvD2JKRPmeQ3midT06ZM8hvN+rnJkvyEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIX/gc0z6+OvNDqzQAAAABJRU5ErkJggg=="
+};
+
+const SPRITES = {
+  idle:   { frameW:64, frameH:64, frames:12 },
+  walk:   { frameW:64, frameH:64, frames:6  },
+  attack: { frameW:64, frameH:64, frames:8  },
+  death:  { frameW:64, frameH:64, frames:7  }
+};
+
+const _spriteImgs = {};
+function loadSprites(){
+  for(const[k,v] of Object.entries(_SPRITE_DATA)){
+    const img=new Image();
+    img.src=v;
+    _spriteImgs[k]=img;
+  }
+}
+
+// =============================================
+//  SPRITE RENDERER — draws one frame of swordsman sheet
+//  Origin is at feet-center. Scale = output pixels per source pixel.
+//  A scale of 0.25 renders the 128×256 frame as 32×64 px.
+// =============================================
+function drawSwordsman(pctx, animKey, frameIdx, scale, facingRight, alpha) {
+  const spr = SPRITES[animKey] || SPRITES.idle;
+  const img = _spriteImgs[animKey];
+  if (!img || !img.complete || !img.naturalWidth) return;
+
+  const fw = spr.frameW;
+  const fh = spr.frameH;
+  const fi = Math.floor(frameIdx) % spr.frames;
+
+  // Normalize render height to 64px source equivalent so death doesn't shrink
+  const normScale = scale; // all frames now 64x64
+  const dw = Math.round(fw * normScale);
+  const dh = Math.round(fh * normScale);
+
+  const sx = fi * fw;
+  const sy = 0;
+
+  pctx.save();
+  if (alpha !== undefined && alpha < 1) pctx.globalAlpha = alpha;
+
+  if (facingRight) {
+    // sprite sheet faces LEFT by default — flip for right-facing
+    pctx.scale(-1, 1);
+    pctx.drawImage(img, sx, sy, fw, fh, -dw / 2, -dh, dw, dh);
+  } else {
+    pctx.drawImage(img, sx, sy, fw, fh, -dw / 2, -dh, dw, dh);
+  }
+  pctx.restore();
+}
+
+// Draw a small enemy monster (pixel art cyclops)
+function drawPixelMonster(pctx, type, ps, jumpPhase, animT, jumpVy) {
+  const c = MONSTER_COL[type] || MONSTER_COL.basic;
+  let sx=1,sy=1;
+  switch(jumpPhase){
+    case'squat': sx=1+animT*0.5; sy=1-animT*0.44; break;
+    case'jump':  sx=jumpVy<0?0.78:0.88; sy=jumpVy<0?1.32:1.16; break;
+    case'land':  sx=1.9-animT*0.7; sy=0.28+animT*0.44; break;
+    case'recover':sx=1.18-animT*0.18; sy=0.72+animT*0.28; break;
+  }
+  pctx.save();pctx.scale(sx,sy);
+  function p(x,y,w,h,col){pctx.fillStyle=col;pctx.fillRect(Math.round(x*ps),Math.round(y*ps),Math.round(w*ps),Math.round(h*ps));}
+  pctx.fillStyle='rgba(0,0,0,0.22)';pctx.fillRect(Math.round(-7*ps),Math.round(4*ps),Math.round(14*ps),Math.round(2*ps));
+  p(-2,-9,4,1,c.outline);
+  p(-4,-8,1,1,c.outline);p(-3,-8,4,1,c.light);p(1,-8,2,1,c.body);p(3,-8,1,1,c.outline);
+  p(-5,-7,1,1,c.outline);p(-4,-7,2,1,c.light);p(-2,-7,4,1,c.body);p(2,-7,2,1,c.dark);p(4,-7,1,1,c.outline);
+  p(-6,-6,1,1,c.outline);p(-5,-6,4,1,c.outline);p(-1,-6,2,1,c.body);p(1,-6,4,1,c.outline);p(5,-6,1,1,c.outline);
+  p(-4,-5,8,1,c.outline);
+  p(-5,-5,1,1,c.outline);p(-4,-5,8,1,c.eye);p(4,-5,1,1,c.outline);
+  p(-5,-4,1,1,c.outline);p(-4,-4,8,1,c.eye);p(4,-4,1,1,c.outline);
+  p(-5,-3,1,1,c.outline);p(-4,-3,8,1,c.eye);p(4,-3,1,1,c.outline);
+  p(-4,-2,8,1,c.outline);
+  p(-1,-5,3,2,c.outline);p(-1,-5,1,1,c.eyeshine);
+  p(-7,-5,2,3,c.body);p(5,-5,2,3,c.body);p(-7,-4,1,1,c.outline);p(7,-4,1,1,c.outline);
+  p(-7,-1,1,1,c.outline);p(-6,-1,12,1,c.body);p(6,-1,1,1,c.outline);
+  p(-7,0,1,1,c.outline);p(-6,0,3,1,c.dark);p(-3,0,1,1,c.outline);
+  p(-2,0,4,1,c.dark);p(2,0,1,1,c.outline);p(3,0,2,1,c.dark);p(5,0,1,1,c.outline);
+  p(-6,1,4,1,c.outline);p(-2,1,4,1,c.outline);p(2,1,3,1,c.outline);
+  switch(type){
+    case'armored':p(-5,-8,10,2,'#8899aa');p(-6,-8,1,2,'#667788');p(5,-8,1,2,'#667788');p(-5,-1,9,1,'#7788aa');break;
+    case'spiky':p(-4,-10,2,3,c.accent);p(-1,-12,2,5,c.accent);p(2,-10,2,3,c.accent);p(-8,-4,2,1,c.accent);p(6,-4,2,1,c.accent);break;
+    case'elite':
+      p(-4,-11,2,3,c.accent);p(-2,-10,1,2,c.accent);p(-1,-12,3,5,c.accent);p(2,-10,1,2,c.accent);p(2,-11,2,3,c.accent);p(-4,-9,9,1,c.accent);
+      pctx.globalAlpha=0.5+0.4*Math.sin(Date.now()/180);p(-2,-5,5,3,c.eyeshine);pctx.globalAlpha=1;break;
+  }
+  pctx.restore();
+}
+
+// Spawn portal visual
+function drawSpawnPortal(pctx, portal) {
+  const {x,y,animT}=portal, t=Date.now()/1000, ripple=animT%1.0;
+  const rings=[{r:22,col:'rgba(80,0,0,0.5)'},{r:15,col:'rgba(120,0,20,0.65)'},{r:9,col:'rgba(20,0,0,0.85)'}];
+  for(const ring of rings){pctx.beginPath();pctx.arc(x,y,ring.r,0,Math.PI*2);pctx.fillStyle=ring.col;pctx.fill();}
+  for(let i=0;i<3;i++){const phase=(ripple+i*0.33)%1,r=10+phase*30;pctx.beginPath();pctx.arc(x,y,r,0,Math.PI*2);pctx.strokeStyle=`rgba(200,0,0,${(1-phase)*0.6})`;pctx.lineWidth=2;pctx.stroke();}
+  pctx.save();pctx.translate(x,y);
+  for(let i=0;i<6;i++){const angle=(t*1.5+i*Math.PI/3)%(Math.PI*2),px2=Math.cos(angle)*9,py2=Math.sin(angle)*9;pctx.fillStyle=i%2===0?'#ff2200':'#880000';pctx.fillRect(Math.round(px2/4)*4-2,Math.round(py2/4)*4-2,4,4);}
+  pctx.fillStyle='#0a0002';pctx.fillRect(-4,-4,8,8);pctx.restore();
+  pctx.font='5px "Press Start 2P",monospace';pctx.fillStyle='rgba(255,80,80,0.7)';pctx.textAlign='center';pctx.fillText('PORTAL',x,y-28);pctx.textAlign='left';
+}
+
+// =============================================
+//  HERO CLASS (replaces Slime)
+// =============================================
+let _heroIdCounter = 0;
+const HERO_CLASSES = {
+  warrior:   {prod:{gold:1.0},          label:'Warrior',   animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  rogue:     {prod:{gold:2.5},          label:'Rogue',      animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  mage:      {prod:{mana:0.8},          label:'Mage',       animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  archmage:  {prod:{mana:2.5},          label:'Archmage',   animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  berserker: {prod:{chaos:0.3},         label:'Berserker',  animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  ranger:    {prod:{mana:1.5,chaos:0.1},label:'Ranger',     animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  paladin:   {prod:{defense:10},        label:'Paladin',    animIdle:'idle', animAtk:'attack', animRun:'walk'},
+  champion:  {prod:{gold:20,mana:5,crystal:2},label:'Champion',animIdle:'idle',animAtk:'attack',animRun:'walk'},
+  legend:    {prod:{gold:80,mana:20,crystal:8},label:'Legend',animIdle:'idle',animAtk:'attack',animRun:'walk'},
+  mystic:    {prod:{gold:300,mana:80,crystal:30},label:'Mystic',animIdle:'idle',animAtk:'attack',animRun:'walk'}
+};
+
+const HERO_COMBAT = {
+  warrior:   {hp:30,  attack:5,  defense:2, attackSpeed:1.0, aggroRange:80},
+  rogue:     {hp:20,  attack:7,  defense:1, attackSpeed:1.5, aggroRange:100},
+  mage:      {hp:15,  attack:8,  defense:0, attackSpeed:0.8, aggroRange:150},
+  archmage:  {hp:20,  attack:14, defense:1, attackSpeed:0.7, aggroRange:180},
+  berserker: {hp:35,  attack:10, defense:0, attackSpeed:2.0, aggroRange:80},
+  ranger:    {hp:22,  attack:8,  defense:1, attackSpeed:1.3, aggroRange:160},
+  paladin:   {hp:60,  attack:6,  defense:8, attackSpeed:0.6, aggroRange:120},
+  champion:  {hp:200, attack:30, defense:12,attackSpeed:1.5, aggroRange:250},
+  legend:    {hp:600, attack:90, defense:35,attackSpeed:1.8, aggroRange:300},
+  mystic:    {hp:2000,attack:280,defense:120,attackSpeed:2.2, aggroRange:400}
+};
+
+const NAMES_FIRST=['Aric','Bael','Cyr','Dorn','Elde','Fynn','Grim','Hael','Iryn','Jax','Kael','Lorn','Myr','Nyx','Oryn','Phar','Quin','Ryx','Syl','Thane','Ulm','Vex','Wren','Xal','Yld','Zorn'];
+const NAMES_LAST=['blade','shadow','storm','fire','iron','void','frost','rune','gale','dawn','dusk','tooth','fang','claw'];
+function _genHeroName(){return NAMES_FIRST[Math.floor(Math.random()*NAMES_FIRST.length)]+NAMES_LAST[Math.floor(Math.random()*NAMES_LAST.length)];}
+
+class Hero {
+  constructor(type){
+    this.id = _heroIdCounter++;
+    this.type = type||'warrior';
+    this.nickname = _genHeroName();
+    this.x = 200+Math.random()*(window.innerWidth-400);
+    const barH=76;
+    this.baseY = window.innerHeight-barH-30-Math.random()*60;
+    this.y=this.baseY;
+    this.isDead=false;
+    this.growLevel=1;
+    this.goldMult=1; this.speedMult=1; this.sizeMult=1;
+    this.isChampion=false;
+    this.isLegend=false;
+    this.isMystic=false;
+    this.equippedWeapon=null; this.weaponAtk=0;
+    this.equippedArmor=null; this.armorDef=0;
+    this.traits={laziness:0.1,chaos:0.05};
+    // combat
+    const cs=HERO_COMBAT[this.type]||HERO_COMBAT.warrior;
+    this.maxHp=cs.hp; this.hp=cs.maxHp||cs.hp;
+    this.attackBase=cs.attack; this.defenseBase=cs.defense;
+    this.atkCooldown=Math.round(60/cs.attackSpeed);
+    this.atkTimer=0;
+    this.combatTarget=null;
+    this.hitFlash=0;
+    this.bubble=null; this.bubbleTimer=0;
+    // animation
+    this.animState='idle'; // idle|walk|attack|hurt|death|run
+    this.animFrame=0; this.animTimer=0;
+    this.frameSpeeds={idle:8,walk:6,attack:4,hurt:6,death:8,run:5};
+    this.facingRight=Math.random()>0.5;
+    // movement
+    this.vx=0; this.vy=0;
+    this.targetX=this.x; this.targetY=this.y;
+    this.wanderTimer=Math.floor(Math.random()*80);
+    // scale: 0.75 → renders 64px frame as 48px wide/tall (swordsman asset is 64x64 frames)
+    this.spriteScale=0.75+(type==='champion'?0.10:0);
+  }
+
+  getAnim(){
+    if(this.isDead) return 'death';
+    if(this.hitFlash>6) return 'hurt';
+    // Attack ONLY when monster is in melee range
+    if(this.combatTarget && Math.hypot(this.x-this.combatTarget.x,this.y-this.combatTarget.y)<60) return 'attack';
+    // Walk when moving, idle when still
+    if(Math.abs(this.vx)>0.3 || Math.abs(this.vy)>0.2) return 'walk';
+    return 'idle';
+  }
+
+  update(){
+    if(this.isDead) return;
+    this.hitFlash=Math.max(0,this.hitFlash-1);
+    this.bubbleTimer=Math.max(0,this.bubbleTimer-1);
+
+    // Find combat target
+    let best=null,bestD=HERO_COMBAT[this.type]?.aggroRange||100;
+    for(const m of monsters){
+      if(m.state==='dead') continue;
+      const d=Math.hypot(this.x-m.x,this.y-m.y);
+      if(d<bestD){bestD=d;best=m;}
+    }
+    this.combatTarget=best;
+
+    if(this.combatTarget){
+      const dx=this.combatTarget.x-this.x, dy=this.combatTarget.y-this.y;
+      const dist=Math.hypot(dx,dy);
+      if(dist>50){
+        this.vx=dx/dist*2.5*(this.speedMult||1);
+        this.vy=dy/dist*1.2*(this.speedMult||1);
+        this.facingRight=dx>0;
+      } else {
+        this.vx*=0.7;this.vy*=0.7;
+        // Attack
+        this.atkTimer++;
+        if(this.atkTimer>=this.atkCooldown){
+          this.atkTimer=0;
+          const atk=this.attackBase+(this.weaponAtk||0);
+          this.combatTarget.takeDamage(atk);
+          spawnParticle(this.combatTarget.x,this.combatTarget.y,'#ffcc44');
+        }
+      }
+    } else {
+      // Wander
+      this.wanderTimer--;
+      if(this.wanderTimer<=0){
+        this.wanderTimer=40+Math.floor(Math.random()*60);
+        const barH=76;
+        const yMin=window.innerHeight-barH-100, yMax=window.innerHeight-barH-20;
+        this.targetX=100+Math.random()*(window.innerWidth-200);
+        this.targetY=yMin+Math.random()*(yMax-yMin);
+      }
+      const dx=this.targetX-this.x, dy=this.targetY-this.y;
+      const d=Math.hypot(dx,dy);
+      if(d>4){
+        const spd=1.2*(this.speedMult||1);
+        this.vx=dx/d*spd;this.vy=dy/d*spd*0.5;
+        this.facingRight=dx>0;
+      } else {this.vx*=0.5;this.vy*=0.5;}
+    }
+    this.x+=this.vx;this.y+=this.vy;
+    this.x=Math.max(30,Math.min(window.innerWidth-30,this.x));
+    const barH2=76;
+    this.y=Math.max(window.innerHeight-barH2-140,Math.min(window.innerHeight-barH2-10,this.y));
+
+    // Animate
+    this.animState=this.getAnim();
+    this.animTimer++;
+    const spd=this.frameSpeeds[this.animState]||8;
+    if(this.animTimer>=spd){
+      this.animTimer=0;
+      const spr=SPRITES[this.animState]||SPRITES.idle;
+      this.animFrame=(this.animFrame+1)%spr.frames;
+    }
+  }
+
+  takeDamage(dmg){
+    const actual=Math.max(1,dmg-this.defenseBase-(this.armorDef||0));
+    this.hp-=actual;
+    this.hitFlash=10;
+    spawnFloatText(this.x+(Math.random()-0.5)*20,this.y-40,actual,'#ff4444',7);
+    if(this.hp<=0){this.hp=0;this.isDead=true;this.animState='death';this.animFrame=0;}
+  }
+
+  draw(){
+    const scale=this.spriteScale*(this.isChampion?1.3:1)*(0.9+this.growLevel*0.04);
+    const dh=Math.round(64*scale);
+    const t=Date.now()/1000;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled=false;
+    if(this.hitFlash>0&&this.hitFlash%2===0){ctx.globalAlpha=0.4;}
+    if(this.isChampion){
+      ctx.shadowColor=this.isMystic?'rgba(180,0,255,0.8)':this.isLegend?'rgba(255,80,0,0.7)':'rgba(255,204,68,0.6)';
+      ctx.shadowBlur=16+8*Math.sin(t*3.3);
+    }
+    ctx.translate(Math.round(this.x),Math.round(this.y));
+    drawSwordsman(ctx,this.animState,this.animFrame,scale,this.facingRight);
+    ctx.restore();
+
+    // ── LEGEND FIRE crown ─────────────────────────────────────
+    if(this.isLegend||this.isMystic){
+      const ps=3;
+      const fx=Math.round(this.x), fy=Math.round(this.y)-dh-2;
+      const frame=Math.floor(t*8)%4;
+      const frames=[
+        [{dx:-1,dy:0,c:'#ffee00'},{dx:0,dy:-3,c:'#ff8800'},{dx:1,dy:-1,c:'#ff4400'},{dx:0,dy:-5,c:'#ff2200'},{dx:-1,dy:-2,c:'#ff6600'}],
+        [{dx:0,dy:-1,c:'#ffee00'},{dx:1,dy:-3,c:'#ff8800'},{dx:-1,dy:-2,c:'#ff4400'},{dx:0,dy:-5,c:'#ff2200'},{dx:1,dy:-3,c:'#ff6600'}],
+        [{dx:0,dy:-2,c:'#ffee00'},{dx:-1,dy:-4,c:'#ff8800'},{dx:1,dy:-1,c:'#ff4400'},{dx:0,dy:-4,c:'#ff2200'},{dx:-1,dy:-3,c:'#ff6600'}],
+        [{dx:1,dy:-1,c:'#ffee00'},{dx:0,dy:-3,c:'#ff8800'},{dx:-1,dy:-2,c:'#ff4400'},{dx:1,dy:-4,c:'#ff2200'},{dx:0,dy:-5,c:'#ff6600'}],
+      ];
+      ctx.save();
+      ctx.imageSmoothingEnabled=false;
+      frames[frame].forEach(({dx,dy,c})=>{
+        ctx.fillStyle=c;
+        ctx.fillRect(fx+dx*ps, fy+dy*ps, ps, ps);
+      });
+      // glow base
+      ctx.globalAlpha=0.4+0.3*Math.sin(t*6);
+      ctx.fillStyle='#ff6600';
+      ctx.fillRect(fx-ps*2, fy, ps*5, ps);
+      ctx.globalAlpha=1;
+      ctx.restore();
+    }
+
+    // ── MYSTIC wings + lightning ───────────────────────────────
+    if(this.isMystic){
+      const ps=3;
+      // Wings sit at mid-body
+      const wx=Math.round(this.x), wy=Math.round(this.y)-Math.round(dh*0.5);
+      const spread=Math.floor(2+Math.sin(t*4)*2);
+      const wCols=['#cc44ff','#ff88ff','#8844cc','#ff44ff','#cc88ff'];
+      ctx.save();
+      ctx.imageSmoothingEnabled=false;
+      // Left wing
+      [[-2-spread,0],[-3-spread,-1],[-4-spread,-2],[-2-spread,-2],[-5-spread,-1],[-3-spread,1]].forEach(([dx,dy],i)=>{
+        ctx.globalAlpha=0.75+0.2*Math.sin(t*3+i);
+        ctx.fillStyle=wCols[i%5];
+        ctx.fillRect(wx+dx*ps, wy+dy*ps, ps, ps);
+      });
+      // Right wing (mirror)
+      [[2+spread,0],[3+spread,-1],[4+spread,-2],[2+spread,-2],[5+spread,-1],[3+spread,1]].forEach(([dx,dy],i)=>{
+        ctx.globalAlpha=0.75+0.2*Math.sin(t*3+i);
+        ctx.fillStyle=wCols[i%5];
+        ctx.fillRect(wx+dx*ps, wy+dy*ps, ps, ps);
+      });
+      ctx.globalAlpha=1;
+      // Lightning bolt flicker
+      if(Math.random()<0.25){
+        const side=Math.random()>0.5?1:-1;
+        const lx=wx+side*(7+Math.floor(Math.random()*3))*ps;
+        const ly=wy-Math.floor(Math.random()*4)*ps;
+        ctx.fillStyle='#ffffff'; ctx.fillRect(lx,ly,ps,ps*3);
+        ctx.fillStyle='#aaaaff'; ctx.fillRect(lx+side*ps,ly+ps*2,ps,ps);
+      }
+      ctx.restore();
+    }
+
+    // HP bar — sits just above sprite top
+    if(!this.isDead){
+      const bw=28,bh=3;
+      const bx=this.x-bw/2, by=this.y-dh-4;
+      ctx.fillStyle='#0a1020';ctx.fillRect(bx,by,bw,bh);
+      const pct=Math.max(0,this.hp/this.maxHp);
+      ctx.fillStyle=pct>0.5?'#44cc44':pct>0.25?'#cccc22':'#cc2222';
+      ctx.fillRect(bx,by,bw*pct,bh);
+      ctx.strokeStyle='#1a2a3a';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);
+    }
+
+    // Speech bubble
+    if(this.bubbleTimer>0&&this.bubble){
+      const dh2=Math.round(64*scale);
+      const bby=this.y-dh2-18;
+      ctx.fillStyle='rgba(5,10,20,0.85)';
+      ctx.fillRect(this.x-50,bby-10,100,12);
+      ctx.font='4px "Press Start 2P",monospace';
+      ctx.fillStyle='#8aacca';ctx.textAlign='center';
+      ctx.fillText(this.bubble,this.x,bby);ctx.textAlign='left';
+    }
+  }
+}
+
+// =============================================
+//  WEAPON SYSTEM
+// =============================================
+const WEAPON_RARITIES=[
+  {name:'COMMON',   css:'rarity-COMMON',   color:'#8aacca',weight:60},
+  {name:'UNCOMMON', css:'rarity-UNCOMMON', color:'#3aff3a',weight:25},
+  {name:'RARE',     css:'rarity-RARE',     color:'#44aaff',weight:10},
+  {name:'EPIC',     css:'rarity-EPIC',     color:'#cc44ff',weight:4},
+  {name:'LEGENDARY',css:'rarity-LEGENDARY',color:'#ffcc44',weight:1}
+];
+
+// ── PIXEL ART WEAPON SPRITE SYSTEM ───────────────────────────────────────────
+// Draws a 16x16 pixel weapon sprite onto a canvas element.
+// type: 'sword'|'dagger'|'bow'|'axe'|'staff'|'glaive'
+// rarity colors drive the palette
+const RARITY_PAL={
+  COMMON:   {hi:'#8aacca',mid:'#4a7a9a',dk:'#1a3a5a',glow:null},
+  UNCOMMON: {hi:'#88ff88',mid:'#2aaa2a',dk:'#0a4a0a',glow:null},
+  RARE:     {hi:'#88ccff',mid:'#2266cc',dk:'#0a1a6a',glow:'#44aaff'},
+  EPIC:     {hi:'#dd88ff',mid:'#8822cc',dk:'#2a0066',glow:'#cc44ff'},
+  LEGENDARY:{hi:'#ffee88',mid:'#cc8800',dk:'#442200',glow:'#ffcc44'}
+};
+
+// Each weapon type is a function(ctx,pal,ps) drawing on 16×16 grid at pixel-size ps
+const WPIX={
+  sword(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    // blade
+    p(7,1,pal.hi); p(7,2,pal.hi); p(7,3,pal.hi); p(7,4,pal.mid);
+    p(7,5,pal.mid); p(7,6,pal.mid); p(7,7,pal.dk); p(7,8,pal.dk);
+    p(6,2,pal.mid); p(8,2,pal.mid); p(6,4,pal.dk); p(8,4,pal.dk);
+    // guard
+    p(5,9,pal.mid);p(6,9,pal.mid);p(7,9,pal.mid);p(8,9,pal.mid);p(9,9,pal.mid);
+    p(5,10,pal.dk);p(9,10,pal.dk);
+    // handle
+    p(7,10,'#7a5a2a');p(7,11,'#7a5a2a');p(7,12,'#7a5a2a');
+    // pommel
+    p(6,13,pal.dk);p(7,13,pal.mid);p(8,13,pal.dk);
+    if(pal.glow){ctx.globalAlpha=0.3;p(7,0,pal.glow);p(7,1,pal.glow);ctx.globalAlpha=1;}
+  },
+  dagger(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    p(8,3,pal.hi);p(7,4,pal.hi);p(8,4,pal.mid);
+    p(7,5,pal.mid);p(8,5,pal.mid);
+    p(7,6,pal.dk);p(8,6,pal.dk);
+    p(7,7,pal.dk);
+    // crossguard
+    p(5,7,pal.mid);p(6,7,pal.mid);p(8,7,pal.mid);p(9,7,pal.mid);
+    // handle
+    p(7,8,'#7a5a2a');p(7,9,'#7a5a2a');p(7,10,'#5a3a1a');
+    p(6,11,pal.dk);p(7,11,pal.mid);p(8,11,pal.dk);
+    if(pal.glow){ctx.globalAlpha=0.35;p(8,3,pal.glow);p(7,4,pal.glow);ctx.globalAlpha=1;}
+  },
+  bow(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    // limbs
+    [2,3,4].forEach(y=>p(5,y,pal.mid));
+    [11,12,13].forEach(y=>p(5,y,pal.mid));
+    p(5,5,pal.hi);p(5,6,pal.hi);p(5,7,pal.hi);p(5,8,pal.hi);p(5,9,pal.hi);p(5,10,pal.hi);
+    p(4,4,pal.dk);p(4,5,pal.dk);p(4,11,pal.dk);p(4,12,pal.dk);
+    // string
+    for(let y=3;y<=13;y++)p(9,y,'#5a4a3a');
+    // arrow
+    p(8,7,pal.hi);p(7,7,pal.mid);p(9,7,'#7a5a2a');p(10,7,'#7a5a2a');p(11,7,'#5a3a1a');
+    p(12,6,pal.dk);p(12,7,pal.dk);p(12,8,pal.dk);
+    if(pal.glow){ctx.globalAlpha=0.3;[3,13].forEach(y=>p(5,y,pal.glow));ctx.globalAlpha=1;}
+  },
+  axe(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    // handle
+    for(let y=5;y<=14;y++)p(8,y,'#7a5a2a');
+    p(8,14,'#5a3a1a');
+    // head
+    p(5,2,pal.hi);p(6,2,pal.hi);p(7,2,pal.hi);p(8,2,pal.hi);
+    p(4,3,pal.hi);p(5,3,pal.mid);p(6,3,pal.mid);p(7,3,pal.mid);p(8,3,pal.mid);
+    p(4,4,pal.mid);p(5,4,pal.mid);p(6,4,pal.mid);p(7,4,pal.mid);p(8,4,pal.mid);
+    p(5,5,pal.dk);p(6,5,pal.dk);p(7,5,pal.dk);
+    // bit edge
+    p(3,3,pal.hi);p(3,4,pal.hi);p(3,5,pal.mid);
+    if(pal.glow){ctx.globalAlpha=0.3;p(3,3,pal.glow);p(4,3,pal.glow);ctx.globalAlpha=1;}
+  },
+  staff(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    // orb
+    p(7,1,pal.hi);p(8,1,pal.hi);
+    p(6,2,pal.hi);p(7,2,pal.mid);p(8,2,pal.mid);p(9,2,pal.dk);
+    p(6,3,pal.mid);p(7,3,pal.mid);p(8,3,pal.dk);p(9,3,pal.dk);
+    p(7,4,pal.dk);p(8,4,pal.dk);
+    // shaft
+    for(let y=5;y<=14;y++)p(7,y,y%2===0?pal.mid:'#5a3a1a');
+    // prongs
+    p(6,5,pal.dk);p(8,5,pal.dk);p(5,6,pal.mid);p(9,6,pal.mid);
+    if(pal.glow){ctx.globalAlpha=0.45;p(7,1,pal.glow);p(8,1,pal.glow);p(7,2,pal.glow);ctx.globalAlpha=1;}
+  },
+  glaive(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    // pole
+    for(let y=5;y<=15;y++)p(9,y,'#7a5a2a');
+    // blade — swept diagonal
+    p(5,1,pal.hi);p(6,1,pal.hi);p(7,1,pal.mid);
+    p(5,2,pal.hi);p(6,2,pal.mid);p(7,2,pal.mid);p(8,2,pal.dk);
+    p(6,3,pal.mid);p(7,3,pal.mid);p(8,3,pal.dk);p(9,3,pal.dk);
+    p(7,4,pal.mid);p(8,4,pal.dk);p(9,4,pal.dk);
+    p(8,5,pal.dk);p(9,5,pal.dk);
+    // edge
+    p(4,2,pal.hi);p(4,3,pal.mid);
+    if(pal.glow){ctx.globalAlpha=0.35;p(5,1,pal.glow);p(6,1,pal.glow);ctx.globalAlpha=1;}
+  },
+  // armor types
+  helm(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    p(5,3,pal.hi);p(6,3,pal.hi);p(7,3,pal.hi);p(8,3,pal.hi);p(9,3,pal.hi);
+    p(4,4,pal.hi);p(5,4,pal.mid);p(9,4,pal.mid);p(10,4,pal.hi);
+    p(4,5,pal.mid);p(5,5,pal.mid);p(9,5,pal.mid);p(10,5,pal.mid);
+    p(4,6,pal.mid);p(10,6,pal.mid);
+    p(3,7,pal.dk);p(4,7,pal.dk);p(10,7,pal.dk);p(11,7,pal.dk);
+    p(3,8,pal.dk);p(11,8,pal.dk);
+    for(let x=4;x<=10;x++)p(x,9,pal.dk);
+    if(pal.glow){ctx.globalAlpha=0.3;[5,6,7,8,9].forEach(x=>p(x,3,pal.glow));ctx.globalAlpha=1;}
+  },
+  shield(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    for(let x=4;x<=11;x++)p(x,2,pal.mid);
+    [3,12].forEach(x=>{for(let y=3;y<=8;y++)p(x,y,pal.dk);});
+    for(let x=4;x<=11;x++){p(x,3,pal.hi);p(x,9,pal.mid);}
+    p(4,10,pal.dk);p(11,10,pal.dk);
+    for(let x=5;x<=10;x++)p(x,10,pal.mid);
+    p(6,11,pal.dk);p(7,11,pal.mid);p(8,11,pal.mid);p(9,11,pal.dk);
+    p(7,12,pal.dk);p(8,12,pal.dk);
+    // boss emblem
+    p(7,5,pal.hi);p(8,5,pal.hi);p(7,6,pal.hi);p(8,6,pal.hi);
+    if(pal.glow){ctx.globalAlpha=0.25;for(let x=4;x<=11;x++)p(x,3,pal.glow);ctx.globalAlpha=1;}
+  },
+  vest(ctx,pal,ps){
+    const p=(x,y,c)=>{ctx.fillStyle=c;ctx.fillRect(x*ps,y*ps,ps,ps);};
+    for(let x=4;x<=11;x++)p(x,2,pal.mid);
+    [3,12].forEach(x=>{for(let y=3;y<=12;y++)p(x,y,pal.dk);});
+    for(let x=4;x<=11;x++){for(let y=3;y<=11;y++)p(x,y,y%3===0?pal.dk:pal.mid);}
+    // collar
+    p(6,2,pal.hi);p(7,2,pal.hi);p(8,2,pal.hi);p(9,2,pal.hi);
+    // clasp
+    p(7,6,pal.hi);p(8,6,pal.hi);p(7,8,pal.hi);p(8,8,pal.hi);
+    if(pal.glow){ctx.globalAlpha=0.2;for(let x=4;x<=11;x++)p(x,2,pal.glow);ctx.globalAlpha=1;}
+  }
+};
+
+// Weapon type → sprite function key
+const WEAPON_SPRITE={
+  'Iron Sword':'sword','Keen Dagger':'dagger','Long Bow':'bow',
+  'Battle Axe':'axe','Mage Staff':'staff','Crystal Blade':'sword',
+  'Void Sword':'sword','Storm Glaive':'glaive','Excalibur':'sword','Shadowmourne':'glaive',
+  'Leather Vest':'vest','Chain Mail':'vest','Iron Plate':'vest',
+  'Spiked Shield':'shield','Crystal Armor':'vest','Battle Aegis':'shield',
+  'Void Plate':'vest','Phoenix Mail':'vest','Holy Armor':'vest','Shadowskin':'vest'
+};
+
+function drawWeaponSprite(name,rarity,size=48){
+  const canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  canvas.style.cssText=`width:${size}px;height:${size}px;image-rendering:pixelated;display:block;`;
+  const ctx2=canvas.getContext('2d');
+  ctx2.imageSmoothingEnabled=false;
+  const pal=RARITY_PAL[rarity]||RARITY_PAL.COMMON;
+  const ps=size/16;
+  const fn=WPIX[WEAPON_SPRITE[name]||'sword'];
+  fn(ctx2,pal,ps);
+  return canvas;
+}
+const WEAPON_POOL=[
+  {name:'Iron Sword',    atk:3, spd:0,  rarity:'COMMON',  special:null},
+  {name:'Keen Dagger',   atk:4, spd:1,  rarity:'COMMON',  special:null},
+  {name:'Long Bow',      atk:5, spd:0,  rarity:'UNCOMMON',special:null},
+  {name:'Battle Axe',   atk:6, spd:-1, rarity:'UNCOMMON',special:null},
+  {name:'Mage Staff',   atk:7, spd:0,  rarity:'RARE',    special:'+mana'},
+  {name:'Crystal Blade',atk:8, spd:1,  rarity:'RARE',    special:null},
+  {name:'Void Sword',   atk:12,spd:0,  rarity:'EPIC',    special:'lifesteal'},
+  {name:'Storm Glaive', atk:10,spd:2,  rarity:'EPIC',    special:'chain'},
+  {name:'Excalibur',    atk:20,spd:2,  rarity:'LEGENDARY',special:'holy'},
+  {name:'Shadowmourne',  atk:18,spd:1,  rarity:'LEGENDARY',special:'chaos'}
+];
+let _weaponUid=0;
+function rollWeaponDrop(wave){
+  // Rarity weights shift with wave
+  const bonus=Math.min(wave*0.5,20);
+  const weights=WEAPON_RARITIES.map(r=>Math.max(0.5,r.weight-(r.name==='COMMON'?bonus:r.name==='UNCOMMON'?bonus*0.3:0)+(r.name==='RARE'||r.name==='EPIC'||r.name==='LEGENDARY'?bonus*0.1:0)));
+  const total=weights.reduce((a,b)=>a+b,0);
+  let roll=Math.random()*total;
+  let rarityName='COMMON';
+  for(let i=0;i<WEAPON_RARITIES.length;i++){roll-=weights[i];if(roll<=0){rarityName=WEAPON_RARITIES[i].name;break;}}
+  const pool=WEAPON_POOL.filter(w=>w.rarity===rarityName);
+  const base=pool[Math.floor(Math.random()*pool.length)]||WEAPON_POOL[0];
+  const waveBonus=Math.floor(wave*0.5);
+  return {uid:`w${_weaponUid++}`,name:base.name,atk:base.atk+waveBonus,spd:base.spd,rarity:rarityName,special:base.special||null,enhance:0,equippedBy:null};
+}
+function _effectiveAtk(w){return w.atk+w.enhance*2;}
+
+// =============================================
+//  ARMOR SYSTEM
+// =============================================
+const ARMOR_POOL=[
+  {name:'Leather Vest',   def:2,  rarity:'COMMON',   special:null},
+  {name:'Chain Mail',     def:3,  rarity:'COMMON',   special:null},
+  {name:'Iron Plate',     def:5,  rarity:'UNCOMMON', special:null},
+  {name:'Spiked Shield',  def:4,  rarity:'UNCOMMON', special:'thorns'},
+  {name:'Crystal Armor',  def:8,  rarity:'RARE',     special:null},
+  {name:'Battle Aegis',   def:7,  rarity:'RARE',     special:'+dodge'},
+  {name:'Void Plate',     def:14, rarity:'EPIC',     special:'void'},
+  {name:'Phoenix Mail',   def:12, rarity:'EPIC',     special:'regen'},
+  {name:'Holy Armor',     def:22, rarity:'LEGENDARY',special:'holy'},
+  {name:'Shadowskin',     def:18, rarity:'LEGENDARY',special:'chaos'}
+];
+let _armorUid=0;
+function rollArmorDrop(wave){
+  const bonus=Math.min(wave*0.5,20);
+  const weights=WEAPON_RARITIES.map(r=>Math.max(0.5,r.weight-(r.name==='COMMON'?bonus:r.name==='UNCOMMON'?bonus*0.3:0)+(r.name==='RARE'||r.name==='EPIC'||r.name==='LEGENDARY'?bonus*0.1:0)));
+  const total=weights.reduce((a,b)=>a+b,0);
+  let roll=Math.random()*total, rarityName='COMMON';
+  for(let i=0;i<WEAPON_RARITIES.length;i++){roll-=weights[i];if(roll<=0){rarityName=WEAPON_RARITIES[i].name;break;}}
+  const pool=ARMOR_POOL.filter(a=>a.rarity===rarityName);
+  const base=pool[Math.floor(Math.random()*pool.length)]||ARMOR_POOL[0];
+  const waveBonus=Math.floor(wave*0.3);
+  return {uid:`a${_armorUid++}`,name:base.name,def:base.def+waveBonus,rarity:rarityName,special:base.special||null,enhance:0,equippedBy:null};
+}
+function _effectiveDef(a){return a.def+a.enhance*2;}
+
+// ─── ENHANCE ─────────────────────────────────────────────────────────────────
+const ENHANCE_MAX=10;
+function enhanceCostWeapon(lv){return Math.floor(100*Math.pow(2,lv));}  // gold
+function enhanceCostArmor(lv) {return Math.floor(60 *Math.pow(1.9,lv));}// crystal
+function enhanceWeapon(uid){
+  const w=G.weaponInventory.find(x=>x.uid===uid);
+  if(!w||w.enhance>=ENHANCE_MAX)return;
+  const cost=enhanceCostWeapon(w.enhance);
+  if(G.resources.gold<cost){showMessage('Not enough gold to enhance!');return;}
+  G.resources.gold-=cost;
+  w.enhance++;
+  if(w.equippedBy){const h=heroes.find(x=>x.id===w.equippedBy);if(h)h.weaponAtk=_effectiveAtk(w);}
+  showMessage(`✨ ${w.name} enhanced to +${w.enhance}!`,w.enhance>=5);
+  refreshInventoryUI();
+}
+function enhanceArmor(uid){
+  const a=(G.armorInventory||[]).find(x=>x.uid===uid);
+  if(!a||a.enhance>=ENHANCE_MAX)return;
+  const cost=enhanceCostArmor(a.enhance);
+  if(G.resources.crystal<cost){showMessage('Not enough crystal to enhance!');return;}
+  G.resources.crystal-=cost;
+  a.enhance++;
+  if(a.equippedBy){const h=heroes.find(x=>x.id===a.equippedBy);if(h)h.armorDef=_effectiveDef(a);}
+  showMessage(`✨ ${a.name} enhanced to +${a.enhance}!`,a.enhance>=5);
+  refreshInventoryUI();
+}
+function equipArmorToHero(auid,heroId){
+  const a=(G.armorInventory||[]).find(x=>x.uid===auid);
+  const h=heroes.find(x=>x.id===heroId);
+  if(!a||!h)return;
+  if(h.equippedArmor){const old=(G.armorInventory||[]).find(x=>x.uid===h.equippedArmor);if(old)old.equippedBy=null;}
+  a.equippedBy=heroId;h.equippedArmor=auid;h.armorDef=_effectiveDef(a);
+  showMessage(`${h.nickname} equipped ${a.name}!`);
+  refreshInventoryUI();
+}
+function unequipArmor(auid){
+  const a=(G.armorInventory||[]).find(x=>x.uid===auid);if(!a)return;
+  const h=heroes.find(x=>x.id===a.equippedBy);
+  if(h){h.equippedArmor=null;h.armorDef=0;}
+  a.equippedBy=null;
+  refreshInventoryUI();
+}
+function autoEquipArmor(auid){
+  const a=(G.armorInventory||[]).find(x=>x.uid===auid);if(!a||a.equippedBy!=null)return;
+  const unarmed=heroes.filter(h=>!h.isDead&&!h.equippedArmor);
+  if(unarmed.length===0){showMessage('All heroes already have armor!');return;}
+  const target=unarmed.reduce((a2,b)=>a2.defenseBase<b.defenseBase?a2:b);
+  equipArmorToHero(auid,target.id);
+}
+
+
+// =============================================
+//  MONSTER TYPES (enemy wave units)
+// =============================================
+const MONSTER_TYPES={
+  basic:   {hp:20,  attack:4,  defense:0,speed:1.0,label:'Goblin',        reward:{gold:5},             xp:1},
+  armored: {hp:50,  attack:5,  defense:4,speed:0.5,label:'Orc Guard',     reward:{gold:12,crystal:1},  xp:2},
+  spiky:   {hp:25,  attack:8,  defense:0,speed:1.2,label:'Spiky Demon',   reward:{gold:8},             xp:1},
+  elite:   {hp:100, attack:12, defense:5,speed:0.7,label:'Elite Knight',  reward:{gold:30,crystal:3},  xp:5},
+  boss:    {hp:600, attack:25, defense:10,speed:0.4,label:'BOSS: Void King',reward:{gold:600,crystal:60,relic:1},xp:25,isBoss:true}
+};
+const MONSTER_COL={
+  basic:   {body:'#cc2222',dark:'#661111',light:'#ff6655',outline:'#1a0000',eye:'#ffffff',eyeshine:'#ffee00',glow:'rgba(200,30,30,0.4)',  accent:'#ff9977'},
+  armored: {body:'#667788',dark:'#334455',light:'#99aabb',outline:'#111822',eye:'#ffffff',eyeshine:'#88ccff',glow:'rgba(80,100,140,0.4)', accent:'#bbccdd'},
+  spiky:   {body:'#dd6600',dark:'#773300',light:'#ffaa33',outline:'#221100',eye:'#ffffff',eyeshine:'#ffff44',glow:'rgba(220,100,0,0.4)',  accent:'#ffcc55'},
+  elite:   {body:'#880099',dark:'#440055',light:'#cc44ff',outline:'#1a0022',eye:'#ffffff',eyeshine:'#ff00ff',glow:'rgba(160,0,220,0.5)',  accent:'#ff88ff'},
+  boss:    {body:'#220033',dark:'#110022',light:'#6600aa',outline:'#0a0015',eye:'#ff0000',eyeshine:'#ff0000',glow:'rgba(80,0,180,0.8)',   accent:'#cc00ff'}
+};
+
+// =============================================
+//  MONSTER CLASS
+// =============================================
+class Monster {
+  constructor(x,y,type='basic'){
+    this.x=x;this.y=y;this.type=type;
+    const stats=MONSTER_TYPES[type]||MONSTER_TYPES.basic;
+    const waveScale=1+(WaveSystem.waveNumber*0.08);
+    this.maxHp=Math.round(stats.hp*waveScale);
+    this.hp=this.maxHp;
+    this.attack=Math.round(stats.attack*(1+WaveSystem.waveNumber*0.05));
+    this.defense=stats.defense;
+    this.speed=stats.speed;
+    this.reward=stats.reward;
+    this.vx=0;this.combatTarget=null;this.atkTimer=0;
+    this.atkCooldown=Math.round(60/(0.8+WaveSystem.waveNumber*0.02));
+    this.state='spawning';this.spawnTimer=40;this.hitFlash=0;this.deathTimer=0;
+    this.jumpY=0;this.jumpVy=0;this.jumpPhase='idle';this.jumpTimer=0;this.animT=0;
+    this.idleWait=Math.floor(5+Math.random()*20);
+    const barH=76;
+    this.baseY=window.innerHeight-barH-55-Math.random()*18;
+    this.y=this.baseY;
+    this.facingRight=x<window.innerWidth/2;
+  }
+  update(){
+    if(this.state==='spawning'){this.spawnTimer--;if(this.spawnTimer<=0)this.state='moving';return;}
+    if(this.state==='dead'){this.deathTimer++;return;}
+    this.hitFlash=Math.max(0,this.hitFlash-1);
+    this._findTarget();
+    const dist=this.combatTarget?Math.hypot(this.x-this.combatTarget.x,this.y-this.combatTarget.y):Infinity;
+    if(this.combatTarget&&dist<45){this.state='attacking';this._doAttack();}
+    else{this.state='moving';this._moveTowardTarget();}
+    this._updateJump();
+  }
+  _findTarget(){
+    let best=null,bestDist=180;
+    for(const h of heroes){if(h.isDead)continue;const d=Math.hypot(this.x-h.x,this.y-h.y);if(d<bestDist&&h.type==='paladin'){bestDist=d;best=h;}}
+    if(!best){bestDist=140;for(const h of heroes){if(h.isDead)continue;const d=Math.hypot(this.x-h.x,this.y-h.y);if(d<bestDist){bestDist=d;best=h;}}}
+    this.combatTarget=best||{x:window.innerWidth/2,y:this.baseY,isCity:true};
+  }
+  _doAttack(){
+    this.atkTimer++;if(this.atkTimer<this.atkCooldown)return;this.atkTimer=0;
+    if(!this.combatTarget)return;
+    if(this.combatTarget.isCity){CombatSystem.damageCity(this.attack);spawnParticle(window.innerWidth/2+(Math.random()-0.5)*80,this.baseY-20,'#ff2200');}
+    else{this.combatTarget.takeDamage(this.attack);}
+  }
+  _moveTowardTarget(){
+    if(!this.combatTarget)return;
+    const dx=this.combatTarget.x-this.x;
+    this.x+=Math.sign(dx)*this.speed*1.5;
+    this.facingRight=dx>0;
+    this.x=Math.max(10,Math.min(window.innerWidth-10,this.x));
+  }
+  _updateJump(){
+    this.idleWait--;
+    if(this.idleWait<=0&&this.jumpPhase==='idle'){this.jumpPhase='squat';this.jumpTimer=0;this.idleWait=Math.floor(12+Math.random()*22);}
+    this.jumpTimer++;const jt=this.jumpTimer;
+    switch(this.jumpPhase){
+      case'squat':this.animT=Math.min(jt/3,1);if(jt>=3){this.jumpVy=-(5+Math.random()*4);this.jumpPhase='jump';this.jumpTimer=0;}break;
+      case'jump':this.jumpVy+=1.6;this.jumpY+=this.jumpVy;this.animT=0;if(this.jumpY>=0){this.jumpY=0;this.jumpVy=0;this.jumpPhase='land';this.jumpTimer=0;}break;
+      case'land':this.animT=Math.min(jt/4,1);if(jt>=4){this.jumpPhase='recover';this.jumpTimer=0;}break;
+      case'recover':this.animT=Math.min(jt/5,1);if(jt>=5){this.jumpPhase='idle';this.animT=0;}break;
+    }
+    this.y=this.baseY+this.jumpY;
+  }
+  takeDamage(dmg){
+    const actual=Math.max(1,dmg-this.defense);
+    this.hp-=actual;this.hitFlash=8;
+    const col=this.type==='boss'?'#ff2200':'#ffee44';
+    const sz=this.type==='boss'?10:8;
+    spawnFloatText(this.x+(Math.random()-0.5)*18,this.y-30,actual,col,sz);
+    if(this.hp<=0&&this.state!=='dead')this._die();
+  }
+  _die(){
+    this.state='dead';this.hp=0;
+    for(const[res,amt] of Object.entries(this.reward)){G.resources[res]=(G.resources[res]||0)+amt;}
+    for(let i=0;i<8;i++)spawnParticle(this.x,this.y,MONSTER_COL[this.type].body);
+    // Loot drop chance
+    const dropChance=(0.15+(G.relicBonuses.relicDropBoost||0)+(G.relicVault?.levels?.dropChance||0)*0.01)*(1+(WaveSystem.waveNumber*0.01));
+    if(Math.random()<dropChance||(this.type==='boss'&&Math.random()<0.8)){
+      const w=rollWeaponDrop(WaveSystem.waveNumber);
+      G.weaponInventory.push(w);
+      G.scrolls=(G.scrolls||0)+1;
+      setTimeout(refreshInventoryUI,100);
+      showMessage(`💰 LOOT DROP: ${w.name} [${w.rarity}]! ATK+${w.atk}`, w.rarity==='LEGENDARY'||w.rarity==='EPIC');
+      spawnFloatText(this.x,this.y-50,"🗡DROP!",'#ffcc44',9);
+    }
+    // Armor drop (50% chance when weapon drops, boss always drops armor too)
+    const armorDropChance=(0.08+(G.relicBonuses.relicDropBoost||0))*(1+(WaveSystem.waveNumber*0.01));
+    if(Math.random()<armorDropChance||(this.type==='boss'&&Math.random()<0.7)){
+      if(!G.armorInventory)G.armorInventory=[];
+      const ar=rollArmorDrop(WaveSystem.waveNumber);
+      G.armorInventory.push(ar);
+      setTimeout(refreshInventoryUI,100);
+      showMessage(`🛡 ARMOR DROP: ${ar.name} [${ar.rarity}]! DEF+${ar.def}`,ar.rarity==='LEGENDARY'||ar.rarity==='EPIC');
+      spawnFloatText(this.x+(Math.random()-0.5)*20,this.y-65,"ARM!",'#44aaff',8);
+    }
+    if(this.type==='boss'){G.resources.relic=(G.resources.relic||0)+1;}
+    WaveSystem.onMonsterDied();
+  }
+  draw(){
+    if(this.state==='dead'){
+      if(this.deathTimer<20){ctx.save();ctx.globalAlpha=1-this.deathTimer/20;ctx.translate(Math.round(this.x),Math.round(this.y+this.jumpY));drawPixelMonster(ctx,this.type,2.4,'land',1,0);ctx.restore();}
+      return;
+    }
+    const ps=this.type==='boss'?4.8:this.type==='elite'?2.6:this.type==='armored'?2.4:2.0;
+    if(this.type==='boss'){ctx.save();const pulse=0.4+0.4*Math.sin(Date.now()/200);ctx.shadowColor=MONSTER_COL.boss.glow;ctx.shadowBlur=40+pulse*20;ctx.fillStyle='rgba(80,0,30,0.15)';ctx.fillRect(this.x-60,this.y-80,120,100);ctx.restore();}
+    ctx.save();ctx.imageSmoothingEnabled=false;
+    if(this.hitFlash>0&&this.hitFlash%2===0)ctx.globalAlpha=0.4;
+    if(this.state==='spawning')ctx.globalAlpha=1-this.spawnTimer/40;
+    ctx.translate(Math.round(this.x),Math.round(this.y+this.jumpY));
+    if(!this.facingRight)ctx.scale(-1,1);
+    drawPixelMonster(ctx,this.type,ps,this.jumpPhase,this.animT,this.jumpVy);
+    ctx.restore();
+    this._drawHpBar(ps);
+  }
+  _drawHpBar(ps){
+    const bw=this.type==='boss'?80:28,bh=this.type==='boss'?6:3;
+    const bx=this.x-bw/2,by=this.y+this.jumpY-ps*12-6;
+    ctx.fillStyle='#1a0000';ctx.fillRect(bx,by,bw,bh);
+    const pct=Math.max(0,this.hp/this.maxHp);
+    ctx.fillStyle=pct>0.5?'#dd2222':pct>0.25?'#dd8822':'#ff4400';
+    ctx.fillRect(bx,by,bw*pct,bh);
+    if(this.type==='boss'){ctx.fillStyle='#ff4400';ctx.font='6px "Press Start 2P",monospace';ctx.fillText(`BOSS ${Math.floor(this.hp)}/${this.maxHp}`,bx,by-4);}
+    ctx.strokeStyle='#330000';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);
+  }
+}
+
+// =============================================
+//  SPAWN PORTAL CLASS
+// =============================================
+class SpawnPortal {
+  constructor(x){this.x=x;const barH=76;this.y=window.innerHeight-barH-60+Math.random()*20;this.animT=0;this.active=true;this.spawnQueue=[];this.spawnTimer=0;}
+  update(){
+    this.animT+=0.016;this.spawnTimer++;
+    if(this.spawnTimer>=40&&this.spawnQueue.length>0){
+      this.spawnTimer=0;
+      const type=this.spawnQueue.shift();
+      monsters.push(new Monster(this.x+(Math.random()-0.5)*30,this.y,type));
+    }
+  }
+  draw(){drawSpawnPortal(ctx,{x:this.x,y:this.y,animT:this.animT,active:this.active});}
+}
+
+// =============================================
+//  WAVE SYSTEM
+// =============================================
+const WaveSystem = {
+  waveNumber:0, waveActive:false, countdown:600, countdownMax:600,
+  enemiesRemaining:0, enemiesTotal:0,
+  onMonsterDied(){
+    this.enemiesRemaining=monsters.filter(m=>m.state!=='dead').length;
+    if(this.enemiesRemaining<=0&&this.waveActive){this.endWave();}
+    this._updateHUD();
+  },
+  startWave(){
+    if(this.waveActive)return;
+    this.waveNumber++;this.waveActive=true;
+    const isBoss=this.waveNumber%5===0;
+    const numPortals=Math.min(3,1+Math.floor(this.waveNumber/4));
+    const enemyCount=isBoss?1:Math.floor(3+this.waveNumber*1.5);
+    this.enemiesTotal=enemyCount;this.enemiesRemaining=enemyCount;
+    portals.length=0;
+    const sides=this.waveNumber%2===0?['left']:this.waveNumber%3===0?['right']:['left','right'];
+    for(let i=0;i<numPortals;i++){
+      const side=sides[i%sides.length];
+      const px=side==='left'?60+Math.random()*100:window.innerWidth-60-Math.random()*100;
+      portals.push(new SpawnPortal(px));
+    }
+    // Distribute enemies across portals
+    const types=isBoss?['boss']:_buildEnemyList(this.waveNumber,enemyCount);
+    types.forEach((t,i)=>{portals[i%portals.length].spawnQueue.push(t);});
+    document.getElementById('wave-number').textContent='WAVE '+this.waveNumber;
+    if(isBoss){
+      document.getElementById('boss-overlay-name').textContent=_bossName(this.waveNumber);
+      document.getElementById('boss-overlay').style.display='block';
+      document.getElementById('difficulty-badge').style.display='block';
+      document.getElementById('difficulty-badge').textContent='⚠ BOSS WAVE '+this.waveNumber;
+      showMessage('⚠ BOSS WAVE! Prepare for battle!',true);
+      setTimeout(()=>document.getElementById('boss-overlay').style.display='none',3500);
+    } else {
+      showMessage(`⚔ Wave ${this.waveNumber} incoming! ${enemyCount} enemies!`);
+    }
+    document.getElementById('enemy-hud').style.display='flex';
+    document.getElementById('wave-progress-fill').style.width='100%';
+    this._updateHUD();
+  },
+  endWave(){
+    this.waveActive=false;portals.length=0;monsters.length=0;
+    G.combat.raidsSurvived++;
+    this.countdown=Math.max(200,600-this.waveNumber*5);
+    this.countdownMax=this.countdown;
+    document.getElementById('enemy-hud').style.display='none';
+    document.getElementById('difficulty-badge').style.display='none';
+    document.getElementById('wave-progress-fill').style.width='0%';
+    showMessage(`✓ Wave ${this.waveNumber} cleared! Loot collected!`,true);
+    _showRaidResult();
+  },
+  tick(){
+    if(!this.waveActive){
+      this.countdown--;
+      const t=this.countdown;
+      document.getElementById('wave-timer-val').textContent=(t/10).toFixed(1)+'s';
+      const prog=1-t/this.countdownMax;
+      document.getElementById('wave-progress-fill').style.width=(prog*100)+'%';
+      if(t<=0)this.startWave();
+    }
+  },
+  _updateHUD(){
+    const rem=monsters.filter(m=>m.state!=='dead').length;
+    document.getElementById('wave-enemy-val').textContent=rem;
+    const ehList=document.getElementById('ehud-list');
+    ehList.innerHTML='';
+    for(const m of monsters.filter(m=>m.state!=='dead').slice(0,8)){
+      const row=document.createElement('div');row.className='ehud-row';
+      const isBoss=m.type==='boss';
+      row.innerHTML=`<span class="ehud-icon">${isBoss?'💀':'👹'}</span><div style="flex:1"><div class="ehud-name">${MONSTER_TYPES[m.type]?.label||m.type}</div><div class="ehud-hpbar"><div class="ehud-hpfill${isBoss?' boss':''}" style="width:${Math.max(0,m.hp/m.maxHp*100)}%"></div></div></div>`;
+      ehList.appendChild(row);
+    }
+    document.getElementById('ehud-count').textContent=rem>8?`+${rem-8} more`:' ';
+    document.getElementById('hud-wave').textContent='W'+this.waveNumber;
+  }
+};
+
+function _bossName(wave){
+  const names=['THE VOID KING','SHADOW TITAN','DEMON LORD','LICH EMPEROR','BONE COLOSSUS','INFERNAL DRAGON','CHAOS HERALD','DEATH KNIGHT','ABYSSAL HORROR','WORLD EATER'];
+  return names[(Math.floor(wave/5)-1)%names.length]||'VOID ENTITY';
+}
+function _buildEnemyList(wave,count){
+  const list=[];
+  for(let i=0;i<count;i++){
+    const r=Math.random();
+    if(wave>=10&&r<0.1)list.push('elite');
+    else if(wave>=5&&r<0.25)list.push('armored');
+    else if(wave>=3&&r<0.4)list.push('spiky');
+    else list.push('basic');
+  }
+  return list;
+}
+
+// =============================================
+//  COMBAT / CITY SYSTEM
+// =============================================
+const CombatSystem={
+  cityHp:1000, cityMaxHp:1000, cityDamaged:false,
+  damageCity(dmg){
+    const actualDmg=Math.max(1,dmg-Math.floor(G.upgrades.wallLevel*2));
+    this.cityHp-=actualDmg;
+    if(this.cityHp<this.cityMaxHp*0.5)this.cityDamaged=true;
+    if(this.cityHp<=0){this.cityHp=0;showMessage('⚠ YOUR CAMP IS DESTROYED! Repairing...',true);this.cityHp=100;}
+  },
+  repairCity(){if(this.cityHp<this.cityMaxHp){this.cityHp=Math.min(this.cityMaxHp,this.cityHp+this.cityMaxHp*0.001);}}
+};
+const RaidSystem={
+  calcDefensePower(){
+    const base=heroes.filter(h=>h.type==='paladin'&&!h.isDead).length*50;
+    const wallBonus=G.upgrades.wallLevel*20;
+    const towerBonus=G.upgrades.towerCount*25;
+    return Math.floor(base+wallBonus+towerBonus);
+  }
+};
+
+// =============================================
+//  RESOURCE / PRODUCTION BUILDINGS
+// =============================================
+class Forge {
+  constructor(x){this.x=x;const barH=76;this.baseH=window.innerHeight-barH;this.level=1;this.timer=0;this.animT=0;this.damaged=false;}
+  update(){
+    this.animT++;this.timer++;
+    const speed=1+(G.relicBonuses.buildingSpeed||0);
+    if(this.timer>=Math.floor(15/speed)){
+      this.timer=0;
+      const out=this.level*3*(1+(G.relicBonuses.gooBoost||0));
+      G.resources.gold+=this.damaged?out*0.5:out;
+    }
+  }
+  draw(){
+    const ox=Math.round(this.x),oy=Math.round(this.baseH);
+    const t=this.animT,fire=Math.abs(Math.sin(t*0.08));
+    ctx.fillStyle='#1c2030';ctx.fillRect(ox,oy-44,36,44);
+    ctx.fillStyle='#141822';ctx.fillRect(ox+2,oy-40,32,36);
+    ctx.fillStyle='#aa4400';ctx.globalAlpha=0.7+fire*0.3;
+    ctx.fillRect(ox+8,oy-20,20,16);ctx.globalAlpha=1;
+    ctx.fillStyle='#ff6600';ctx.fillRect(ox+10,oy-22,6,4);ctx.fillRect(ox+18,oy-24,6,6);
+    ctx.fillStyle='#ffcc00';ctx.fillRect(ox+12,oy-26,4,4);
+    ctx.fillStyle='#2a3050';ctx.fillRect(ox+14,oy-44,8,20);
+    ctx.globalAlpha=0.4+fire*0.3;ctx.fillStyle='#ff8800';
+    ctx.fillRect(ox+15,oy-50,6,8);ctx.globalAlpha=1;
+    if(this.damaged){ctx.globalAlpha=0.25+0.15*Math.sin(t*0.1);ctx.fillStyle='#ff2200';ctx.fillRect(ox,oy-44,36,44);ctx.globalAlpha=1;}
+    ctx.font='5px "Press Start 2P",monospace';ctx.textAlign='center';
+    ctx.fillStyle=this.damaged?'#ff5533':'#ff8844';ctx.globalAlpha=0.9;
+    ctx.fillText(this.damaged?'⚠ DMG':'FORGE',ox+18,oy-48);ctx.globalAlpha=1;ctx.textAlign='left';
+  }
+}
+
+class CrystalMine {
+  constructor(x,baseH,level){this.x=x;this.baseH=baseH||(window.innerHeight-76);this.level=level||1;this.timer=0;this.animT=0;this.sparkles=[];this.damaged=false;}
+  static outputForLevel(lv){return[0,1.5,3.0,5.5,9.0,14.0][lv]||1.5;}
+  static upgradeCost(lv){return[[null],[300,0],[600,30],[1200,80],[2500,180]][lv]||null;}
+  upgrade(){if(this.level>=5)return false;this.level++;for(let i=0;i<12;i++)spawnParticle(this.x+20,this.baseH-40,'#ccaaff');return true;}
+  update(){
+    this.animT++;this.timer++;
+    if(this.timer>=15){this.timer=0;const out=CrystalMine.outputForLevel(this.level)*(1+(G.relicBonuses.crystalBoost||0));G.resources.crystal+=this.damaged?out*0.5:out;}
+    if(Math.random()<0.02+this.level*0.01)this.sparkles.push({x:this.x+10+Math.random()*20,y:this.baseH-30-Math.random()*30,life:1,r:1.5+Math.random()*2});
+    this.sparkles=this.sparkles.filter(p=>{p.life-=0.025;p.y-=0.3;return p.life>0;});
+  }
+  draw(){
+    const ox=Math.round(this.x),oy=Math.round(this.baseH),t=this.animT,lv=this.level,dmg=this.damaged;
+    const CC=dmg?['#0a0004','#220e22','#552244','#884466','#aa6688','#ccaacc']:['#0a0416','#1a0a44','#2a1488','#4422cc','#7755ee','#ccbbff'];
+    ctx.globalAlpha=0.15+lv*0.04;ctx.fillStyle='#6622ff';ctx.fillRect(ox-4,oy-68,48,62);ctx.globalAlpha=1;
+    ctx.fillStyle='#1e1824';ctx.fillRect(ox,oy-12,40,8);ctx.fillStyle='#120f1a';ctx.fillRect(ox,oy-4,40,4);
+    // Crystal shards
+    const drawShard=(cx,tipY,tipW,bodyH,baseW)=>{
+      for(let col=0;col<baseW;col++){
+        const bx=ox+cx+col,dist=Math.abs(col-baseW/2+0.5)/(baseW/2),totalH=tipW*2+bodyH,taper=dist*0.5,colH=Math.round(totalH*(1-taper)),colTop=oy+tipY+(totalH-colH);
+        if(col===0||col===baseW-1){ctx.fillStyle=CC[0];ctx.fillRect(bx,colTop,1,colH);continue;}
+        ctx.fillStyle=CC[4];ctx.fillRect(bx,colTop,1,2);
+        ctx.fillStyle=col<baseW/3?CC[3]:col>baseW*2/3?CC[1]:CC[2];ctx.fillRect(bx,colTop+2,1,Math.max(0,colH-4));
+        ctx.fillStyle=CC[0];ctx.fillRect(bx,colTop+colH-2,1,2);
+      }
+    };
+    drawShard(2,-58,2,20,8);drawShard(12,-68,2,28,14);drawShard(0,-54,2,22,10);
+    if(lv>=3){drawShard(-6,-46,1,14,6);drawShard(38,-44,1,12,6);}
+    const shine=Math.abs(Math.sin(t*0.05));
+    ctx.globalAlpha=0.4+shine*0.5;ctx.fillStyle='#ffffff';ctx.fillRect(ox+17,oy-67,2,4);ctx.globalAlpha=1;
+    for(const p of this.sparkles){ctx.globalAlpha=p.life*0.85;ctx.fillStyle='#ccaaff';ctx.fillRect(Math.round(p.x/2)*2-2,Math.round(p.y/2)*2-2,4,4);ctx.globalAlpha=1;}
+    ctx.font='5px "Press Start 2P",monospace';ctx.textAlign='center';
+    ctx.fillStyle=dmg?'#ff4466':lv>=3?'#bb99ff':'#aa66ff';ctx.globalAlpha=0.9;
+    ctx.fillText(dmg?'⚠ DMG':`MINE LV${lv}`,ox+20,oy-74);ctx.globalAlpha=1;ctx.textAlign='left';
+  }
+}
+
+class ManaConduit {
+  constructor(x){this.x=x;const barH=76;this.baseH=window.innerHeight-barH;this.timer=0;this.animT=0;this.damaged=false;}
+  update(){
+    this.animT++;this.timer++;
+    if(this.timer>=12){this.timer=0;const out=3*(1+(G.relicBonuses.dataBoost||0));G.resources.mana+=(G.resources.mana||0),G.resources.mana=(G.resources.mana||0)+(this.damaged?out*0.5:out);}
+  }
+  draw(){
+    const ox=Math.round(this.x),oy=Math.round(this.baseH),t=this.animT;
+    const pulse=0.5+0.4*Math.sin(t*0.07);
+    ctx.globalAlpha=pulse*0.4;ctx.fillStyle='#4400ff';ctx.fillRect(ox-2,oy-60,36,54);ctx.globalAlpha=1;
+    ctx.fillStyle='#1a1040';ctx.fillRect(ox+4,oy-50,24,46);
+    ctx.fillStyle='#2a2060';ctx.fillRect(ox+6,oy-48,20,42);
+    ctx.fillStyle='#4422aa';ctx.fillRect(ox+12,oy-52,8,6);
+    for(let i=0;i<3;i++){ctx.globalAlpha=pulse*(0.5+i*0.15);ctx.fillStyle='#8844ff';ctx.fillRect(ox+8+i*6,oy-46+i*8,4,4);ctx.globalAlpha=1;}
+    ctx.font='5px "Press Start 2P",monospace';ctx.textAlign='center';ctx.fillStyle='#8844ff';ctx.globalAlpha=0.9;
+    ctx.fillText('MANA',ox+16,oy-56);ctx.globalAlpha=1;ctx.textAlign='left';
+  }
+}
+
+// =============================================
+//  EVENTS
+// =============================================
+const EVENTS=[
+  {id:'merchant',title:'🛒 Wandering Merchant',desc:'A merchant offers bonus gold! +200% for 30s.',goldMult:3,dur:300},
+  {id:'ambush',  title:'🗡 Bandit Ambush',    desc:'Bandits raid! Production halted.',goldMult:0,dur:150},
+  {id:'feast',   title:'🍖 Guild Feast',      desc:'Morale soars! All heroes gain XP.',xpBonus:true},
+  {id:'rift',    title:'🌀 Mana Rift Opened', desc:'Mana floods the area! Mana ×2.',manaMult:2},
+  {id:'blessing',title:'✨ Divine Blessing',  desc:'Rank bonus! Guild Rank +8.',intBonus:8},
+  {id:'dragon',  title:'🐉 Dragon Sighting',  desc:'Dragon spotted! Chaos spikes +35.',chaos:35},
+  {id:'loot',    title:'💰 Lost Treasure',    desc:'Gold cache discovered! +500 gold.',goldBonus:500},
+  {id:'curse',   title:'💀 Ancient Curse',    desc:'Monsters gain power. Defense reduced.',defDebuff:true}
+];
+function triggerEvent(){
+  const ev=EVENTS[Math.floor(Math.random()*EVENTS.length)];
+  G.activeEvent=ev;G.eventTimer=ev.dur||60;
+  if(ev.chaos!==undefined)G.resources.chaos=Math.max(0,(G.resources.chaos||0)+ev.chaos);
+  if(ev.intBonus!==undefined)G.stats.intelligence=Math.min(100,G.stats.intelligence+ev.intBonus);
+  if(ev.goldBonus!==undefined)G.resources.gold=(G.resources.gold||0)+ev.goldBonus;
+  if(ev.goldMult!==undefined)G.goldMult=ev.goldMult;
+  if(ev.manaMult!==undefined)G.manaMult=ev.manaMult||1;
+  showEventBanner(ev.title,ev.desc);
+  document.getElementById('s-event').textContent='⚡ '+ev.title;
+}
+function clearEvent(){G.goldMult=1;G.manaMult=1;G.activeEvent=null;document.getElementById('s-event').textContent='';document.getElementById('event-banner').style.display='none';}
+function showEventBanner(title,desc){
+  document.getElementById('event-title').textContent=title;
+  document.getElementById('event-desc').textContent=desc;
+  document.getElementById('event-banner').style.display='block';
+  clearTimeout(window._evBannerT);
+  window._evBannerT=setTimeout(()=>document.getElementById('event-banner').style.display='none',4000);
+}
+
+// =============================================
+//  RESEARCH TREE
+// =============================================
+const RESEARCH_TREE={
+  goldOptimization: {cost:{mana:50},            label:'+ Gold Output +20%',  effect:g=>{g.relicBonuses.gooBoost=(g.relicBonuses.gooBoost||0)+0.2;}},
+  manaNetwork:      {cost:{mana:80},             label:'+ Mana Rate +30%',    effect:g=>{g.relicBonuses.dataBoost=(g.relicBonuses.dataBoost||0)+0.3;}},
+  crystalRefinement:{cost:{mana:60,crystal:20},  label:'+ Crystal Yield +25%',effect:g=>{g.relicBonuses.crystalBoost=(g.relicBonuses.crystalBoost||0)+0.25;}},
+  battleTactics:    {cost:{mana:100,crystal:40}, label:'+ Defense Power +20%',effect:g=>{g.relicBonuses.defenseBoost=(g.relicBonuses.defenseBoost||0)+0.2;}},
+  alchemyControl:   {cost:{mana:120,chaos:30},   label:'+ Drop Chance +5%',   effect:g=>{g.relicBonuses.relicDropBoost=(g.relicBonuses.relicDropBoost||0)+0.05;}},
+  relicSensing:     {cost:{mana:200,crystal:80}, label:'+ Relic Drop +0.5%',  effect:g=>{g.relicBonuses.relicDropBoost=(g.relicBonuses.relicDropBoost||0)+0.005;}},
+  chaosHarvesting:  {cost:{mana:150,chaos:50},   label:'+ Chaos → Gold Conv', effect:g=>{g.relicBonuses.chaosConvert=true;}},
+  advancedTactics:  {cost:{mana:300},            label:'+ Champion Power ×2', effect:g=>{g.relicBonuses.championMult=2;}}
+};
+
+const RELIC_ASCENSIONS={
+  productivity: {baseCost:{relic:1,gold:1000},label:'Guild Productivity +5%',maxLevel:10,effect:(g,lv)=>{g.relicBonuses.gooBoost=lv*0.05;}},
+  raidDefense:  {baseCost:{relic:2},           label:'Raid Defense +10%',    maxLevel:5, effect:(g,lv)=>{g.relicBonuses.defenseBoost=(g.relicBonuses.defenseBoost||0)+0.1;}},
+  dropChance:   {baseCost:{relic:2,mana:100},  label:'Loot Drop Chance +5%', maxLevel:5, effect:(g,lv)=>{g.relicBonuses.relicDropBoost=(g.relicBonuses.relicDropBoost||0)+0.05;}},
+  crystalSense: {baseCost:{relic:1,crystal:50},label:'Crystal Production +15%',maxLevel:8,effect:(g,lv)=>{g.relicBonuses.crystalBoost=lv*0.15;}},
+  civilizationMem:{baseCost:{relic:5},         label:'Prestige Bonus +10%',  maxLevel:3, effect:(g,lv)=>{g.relicBonuses.prestigeBonus=lv*0.1;}}
+};
+
+// =============================================
+//  GAME STATE
+// =============================================
+function newGame(){
+  return {
+    tick:0, savedAt:Date.now(),
+    resources:{gold:0,mana:0,crystal:0,chaos:0,relic:0},
+    stats:{intelligence:0},
+    upgrades:{growFaster:0,wallLevel:0,towerCount:0,gooReservoir:0,turboCycles:0,increaseIntelligence:0},
+    relicBonuses:{gooBoost:0,dataBoost:0,crystalBoost:0,defenseBoost:0,mutSuccessBoost:0,relicDropBoost:0,chaosConvert:false,buildingSpeed:0,prestigeBonus:0,championMult:1},
+    combat:{raidsSurvived:0,cityHp:1000},
+    research:{completed:{}},
+    relicVault:{unlocked:false,levels:{}},
+    weaponInventory:[],
+    armorInventory:[],
+    scrolls:0,
+    goldMult:1, manaMult:1,
+    activeEvent:null, eventTimer:0,
+    _goldRate:0,
+    prestige:{totalPoints:0,civilizationBonus:0,runs:0},
+    nextRaidTick:0,
+  };
+}
+let G=newGame();
+let heroes=[], monsters=[], portals=[], forges=[], mines=[], conduits=[];
+let particles=[], floatTexts=[], evoLog=[];
+let canvas,ctx,_bgGrad,_uiHidden=false;
+const TICK_GOLD_SAMPLE=[];
+
+function fmtNum(n){if(n===undefined||n===null)return'0';if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return Math.floor(n).toString();}
+
+// =============================================
+//  PARTICLES & FLOAT TEXT
+// =============================================
+let _particles=[];
+function spawnParticle(x,y,color){_particles.push({x,y,vx:(Math.random()-0.5)*3,vy:-1-Math.random()*2,life:1,color});}
+function updateParticles(){_particles=_particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life-=0.04;return p.life>0;});}
+function drawParticles(){for(const p of _particles){ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(Math.round(p.x),Math.round(p.y),3,3);}ctx.globalAlpha=1;}
+let _floats=[];
+function spawnFloatText(x,y,text,color,size){_floats.push({x,y,text:String(text),color,size:size||7,life:1,vy:-1.2});}
+function updateFloatTexts(){_floats=_floats.filter(f=>{f.y+=f.vy;f.vy*=0.95;f.life-=0.025;return f.life>0;});}
+function drawFloatTexts(){for(const f of _floats){ctx.globalAlpha=f.life;ctx.fillStyle=f.color;ctx.font=`${f.size}px "Press Start 2P",monospace`;ctx.textAlign='center';ctx.fillText(f.text,f.x,f.y);}ctx.globalAlpha=1;ctx.textAlign='left';}
+
+// =============================================
+//  BACKGROUND DRAWING
+// =============================================
+function resizeCanvas(){
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+}
+
+function drawBackground(){
+  // Day/night cycle — full cycle every 4800 ticks (~8 min)
+  const dayT=(G.tick%4800)/4800; // 0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk
+  const sunAngle=dayT*Math.PI*2; // 0=midnight top, PI=noon
+  const dayness=Math.max(0,Math.sin(sunAngle-Math.PI/2)*0.5+0.5); // 0=night, 1=day
+
+  // Sky gradient interpolated between night and day
+  const lerp=(a,b,t)=>Math.round(a+(b-a)*t);
+  const lerpCol=(nr,ng,nb,dr,dg,db,t)=>`rgb(${lerp(nr,dr,t)},${lerp(ng,dg,t)},${lerp(nb,db,t)})`;
+
+  // Dawn/dusk tint (peaks at 0.2 and 0.75 of cycle)
+  const dawnDusk=Math.max(0,Math.sin(dayT*Math.PI*2+Math.PI*0.5)*-1)*0.7;
+  const duskR=lerp(0,180,dawnDusk), duskG=lerp(0,60,dawnDusk), duskB=lerp(0,20,dawnDusk);
+
+  const grad=ctx.createLinearGradient(0,0,0,canvas.height*0.7);
+  // Night: deep navy. Day: bright blue sky
+  grad.addColorStop(0, `rgb(${lerp(4,80,dayness)+duskR},${lerp(6,140,dayness)+duskG},${lerp(18,200,dayness)+duskB})`);
+  grad.addColorStop(0.5,`rgb(${lerp(6,110,dayness)+duskR},${lerp(14,170,dayness)+duskG},${lerp(25,220,dayness)+duskB})`);
+  grad.addColorStop(1, `rgb(${lerp(8,140,dayness)},${lerp(18,190,dayness)},${lerp(32,230,dayness)})`);
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Sun or moon
+  const celestialX=canvas.width*0.75;
+  const celestialY=canvas.height*0.45-Math.sin(sunAngle)*canvas.height*0.35;
+  if(dayness>0.15){
+    // Sun
+    const sunAlpha=Math.min(1,(dayness-0.15)/0.2);
+    ctx.save();
+    ctx.globalAlpha=sunAlpha;
+    // Glow
+    const sg=ctx.createRadialGradient(celestialX,celestialY,4,celestialX,celestialY,40);
+    sg.addColorStop(0,'rgba(255,240,150,0.6)');sg.addColorStop(1,'rgba(255,200,50,0)');
+    ctx.fillStyle=sg;ctx.fillRect(celestialX-40,celestialY-40,80,80);
+    // Disc — pixel art 8x8
+    const ps=4;
+    [[1,0],[2,0],[0,1],[1,1],[2,1],[3,1],[0,2],[1,2],[2,2],[3,2],[1,3],[2,3]].forEach(([dx,dy])=>{
+      ctx.fillStyle=dy===0||dy===3?'#ffdd44':'#ffee88';
+      ctx.fillRect(celestialX+(dx-1.5)*ps,celestialY+(dy-1.5)*ps,ps,ps);
+    });
+    ctx.restore();
+  } else {
+    // Moon — pixel art crescent
+    const moonAlpha=Math.min(1,(1-dayness-0.1)/0.15);
+    ctx.save();ctx.globalAlpha=Math.max(0,moonAlpha);
+    const ps=3;
+    [[1,0],[2,0],[0,1],[1,1],[2,1],[3,1],[0,2],[1,2],[2,2],[3,2],[1,3],[2,3]].forEach(([dx,dy])=>{
+      ctx.fillStyle='#ddeeff';
+      ctx.fillRect(celestialX+(dx-1.5)*ps,celestialY+(dy-1.5)*ps,ps,ps);
+    });
+    // Shadow bite
+    [[2,0],[3,1],[3,2],[2,3]].forEach(([dx,dy])=>{
+      ctx.fillStyle=`rgb(${lerp(4,80,dayness)},${lerp(6,140,dayness)},${lerp(18,200,dayness)})`;
+      ctx.fillRect(celestialX+(dx-1)*ps,celestialY+(dy-1.5)*ps,ps,ps);
+    });
+    ctx.restore();
+  }
+
+  // Stars — only at night
+  const starAlpha=(1-dayness)*0.8;
+  if(starAlpha>0.05){
+    ctx.fillStyle=`rgba(180,210,255,${starAlpha})`;
+    for(let i=0;i<50;i++){
+      const sx=(i*137+17)%canvas.width, sy=(i*89+13)%(canvas.height*0.45);
+      const blink=0.4+0.6*Math.sin(G.tick*0.05+i*1.3);
+      ctx.globalAlpha=starAlpha*blink;
+      ctx.fillRect(Math.round(sx/2)*2,Math.round(sy/2)*2,2,2);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // Clouds — daytime only, pixel art blobs drifting right
+  if(dayness>0.2){
+    ctx.globalAlpha=dayness*0.7;
+    const cloudCols=['#ffffff','#eeeeff','#ffffff'];
+    for(let c=0;c<3;c++){
+      const cx2=((G.tick*0.15*(1+c*0.3))+(c*canvas.width/3+80))%canvas.width;
+      const cy=canvas.height*(0.12+c*0.07);
+      const ps=4;
+      [[0,1],[1,0],[1,1],[2,0],[2,1],[3,1],[1,2],[2,2]].forEach(([dx,dy])=>{
+        ctx.fillStyle=cloudCols[dy%3];
+        ctx.fillRect(Math.round(cx2+dx*ps*2),Math.round(cy+dy*ps),ps*2,ps);
+      });
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // _drawCamp is called from drawGround after ground tiles are laid
+}
+
+function _drawCamp(){
+  const barH=76,cx=Math.round(canvas.width/2),gy=canvas.height-barH-10;
+  // Flag
+  ctx.fillStyle='#1a2a4a';ctx.fillRect(cx-2,gy-80,4,80);
+  ctx.fillStyle='#ff8844';ctx.fillRect(cx+2,gy-78,20,14);
+  ctx.fillStyle='#cc5522';ctx.fillRect(cx+2,gy-64,20,3);
+  // Palisade walls
+  for(let i=-3;i<=3;i++){const wx=cx+i*22;ctx.fillStyle='#1c2a1c';ctx.fillRect(wx-5,gy-30,10,30);ctx.fillStyle='#243224';ctx.fillRect(wx-4,gy-32,8,4);}
+  // Gate
+  ctx.fillStyle='#141e14';ctx.fillRect(cx-14,gy-25,28,25);ctx.fillStyle='#0a140a';ctx.fillRect(cx-12,gy-22,24,22);
+  // Camp health bar
+  const hpPct=Math.max(0,CombatSystem.cityHp/CombatSystem.cityMaxHp);
+  ctx.fillStyle='#0a1020';ctx.fillRect(cx-40,gy-90,80,5);
+  ctx.fillStyle=hpPct>0.5?'#44cc44':hpPct>0.25?'#cccc22':'#cc2222';ctx.fillRect(cx-40,gy-90,80*hpPct,5);
+  ctx.font='4px "Press Start 2P",monospace';ctx.fillStyle='#446677';ctx.textAlign='center';ctx.fillText('CAMP',cx,gy-95);ctx.textAlign='left';
+}
+
+// Pre-baked tile variation — stable seeds so floor never flickers
+const _TILE_SEED=(()=>{const a=[];for(let i=0;i<512;i++)a.push(Math.random());return a;})();
+
+function drawGround(){
+  // Hero-bar UI is 100px fixed at bottom. Heroes walk at canvas.height-76-30 to canvas.height-76-100.
+  // Ground top = canvas.height * 0.60 so the tile floor fills everything below that line.
+  const UI_H=100;                                     // hero-bar height
+  const WALK_Y=canvas.height-UI_H-10;                 // where feet touch ground
+  const GROUND_TOP=Math.round(canvas.height*0.60);    // where visible ground starts
+  const GROUND_H=WALK_Y-GROUND_TOP;                   // visible band height
+  const TW=64, TH=24;
+  const cols=Math.ceil(canvas.width/TW)+1;
+  const rows=Math.ceil(GROUND_H/TH)+2;
+
+  // Day/night tint
+  const dayT=(G.tick%4800)/4800;
+  const dayness=Math.max(0,Math.sin(dayT*Math.PI*2-Math.PI/2)*0.5+0.5);
+  const lerp=(a,b,t)=>Math.round(a+(b-a)*t);
+  const baseR=lerp(10,24,dayness), baseG=lerp(18,36,dayness), baseB=lerp(36,20,dayness);
+
+  const enemyX=canvas.width*0.65;
+  const t=Date.now()/1000;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+
+  // Fill entire ground band first (no gaps)
+  ctx.fillStyle=`rgb(${baseR},${baseG},${baseB})`;
+  ctx.fillRect(0, GROUND_TOP, canvas.width, GROUND_H+TH);
+
+  // Tile overlay
+  for(let row=0;row<rows;row++){
+    const ty=GROUND_TOP+row*TH;
+    for(let col=0;col<cols;col++){
+      const tx=col*TW;
+      const seed=_TILE_SEED[(col*7+row*13)%512];
+      const isEnemy=tx>enemyX;
+      const v=Math.floor(seed*14)-7;
+      const r=Math.max(0,Math.min(255,baseR+v+(isEnemy?10:0)));
+      const g=Math.max(0,Math.min(255,baseG+v-(isEnemy?4:0)));
+      const b=Math.max(0,Math.min(255,baseB+v-(isEnemy?8:0)));
+      ctx.fillStyle=`rgb(${r},${g},${b})`;
+      ctx.fillRect(tx,ty,TW,TH);
+      // tile grid lines
+      ctx.strokeStyle=`rgba(0,0,0,0.25)`;
+      ctx.lineWidth=1;
+      ctx.strokeRect(tx+0.5,ty+0.5,TW-1,TH-1);
+      // rune glyph ~8% of tiles
+      if(seed>0.92){
+        const rx=tx+TW/2, ry=ty+TH/2;
+        ctx.fillStyle=isEnemy?'rgba(255,50,50,0.20)':'rgba(80,120,255,0.20)';
+        const ps=3;
+        [[1,0],[0,1],[1,1],[2,1],[1,2]].forEach(([dx,dy])=>
+          ctx.fillRect(rx+(dx-1)*ps, ry+(dy-1)*ps, ps, ps)
+        );
+      }
+    }
+  }
+
+  // Top-edge horizon line — bright seam
+  const seam=ctx.createLinearGradient(0,0,canvas.width,0);
+  seam.addColorStop(0,   `rgba(60,100,200,${0.05+dayness*0.15})`);
+  seam.addColorStop(0.62,`rgba(80,50,130,0.18)`);
+  seam.addColorStop(0.65,`rgba(160,50,40,0.25)`);
+  seam.addColorStop(1,   `rgba(120,35,35,0.12)`);
+  ctx.fillStyle=seam;
+  ctx.fillRect(0,GROUND_TOP,canvas.width,4);
+  // Brighter 1px lip
+  ctx.fillStyle=`rgba(${lerp(40,100,dayness)},${lerp(70,140,dayness)},${lerp(120,80,dayness)},0.6)`;
+  ctx.fillRect(0,GROUND_TOP,canvas.width,1);
+
+  // Animated magic dividing line
+  const divX=Math.round(canvas.width*0.63);
+  ctx.globalAlpha=0.4+0.15*Math.sin(t*2);
+  ctx.strokeStyle='#7744cc';
+  ctx.lineWidth=2;
+  ctx.setLineDash([4,8]);
+  ctx.lineDashOffset=-t*12;
+  ctx.beginPath();ctx.moveTo(divX,GROUND_TOP);ctx.lineTo(divX,WALK_Y);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha=1;
+
+  // Shadows directly under character feet (u.y IS the foot position)
+  const allUnits=[...heroes,...monsters].filter(u=>u&&!u.isDead&&u.y);
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  allUnits.forEach(u=>{
+    const sx=Math.round(u.x), sy=Math.round(u.y);
+    ctx.globalAlpha=0.30;
+    ctx.fillStyle='#000';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 10, 3, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  ctx.restore();
+
+  // Camp drawn on top of ground tiles
+  _drawCamp();
+}
+
+// =============================================
+//  HERO PORTRAIT BAR
+// =============================================
+// Tier rank for sorting: mystic > legend > champion > others
+const TIER_RANK={mystic:0,legend:1,champion:2};
+function _heroTier(h){return h.isMystic?'mystic':h.isLegend?'legend':h.isChampion?'champion':'normal';}
+function _tierRank(h){return TIER_RANK[_heroTier(h)]??3;}
+
+// Draw static portrait sprite (frame 0, no animation)
+function _drawPortraitStatic(cv, h){
+  const pc=cv.getContext('2d');
+  pc.clearRect(0,0,cv.width,cv.height);
+  pc.imageSmoothingEnabled=false;
+  pc.save();
+  pc.rect(0,0,cv.width,cv.height);
+  pc.clip();
+  pc.translate(cv.width/2, cv.height-4);
+  drawSwordsman(pc,'idle',0, 0.65, true);
+  pc.restore();
+}
+
+// FX canvas animation tick — called from gameLoop
+const _fxCanvases=new Map();
+function tickPortraitFX(){
+  const t=Date.now()/1000;
+  for(const[hid,{canvas:fxCv,tier}] of _fxCanvases){
+    const cw=fxCv.width,ch=fxCv.height;
+    const pc=fxCv.getContext('2d');
+    pc.clearRect(0,0,cw,ch);
+    pc.imageSmoothingEnabled=false;
+    const ps=2,cx2=Math.floor(cw/2);
+    // FIRE — legend and mystic
+    if(tier==='legend'||tier==='mystic'){
+      const fy=Math.floor(ch*0.28); // head is ~30% from top of portrait canvas
+      const frame=Math.floor(t*8)%4;
+      const frames=[
+        [{dx:-2,dy:0,c:'#ffee00'},{dx:0,dy:-3,c:'#ff8800'},{dx:2,dy:-1,c:'#ff4400'},{dx:0,dy:-5,c:'#ff2200'},{dx:-1,dy:-2,c:'#ff6600'}],
+        [{dx:-1,dy:-1,c:'#ffee00'},{dx:1,dy:-4,c:'#ff8800'},{dx:-2,dy:-2,c:'#ff4400'},{dx:0,dy:-6,c:'#ff2200'},{dx:2,dy:-3,c:'#ff6600'}],
+        [{dx:0,dy:-2,c:'#ffee00'},{dx:-1,dy:-5,c:'#ff8800'},{dx:2,dy:-1,c:'#ff4400'},{dx:1,dy:-4,c:'#ff2200'},{dx:-2,dy:-3,c:'#ff6600'}],
+        [{dx:1,dy:-1,c:'#ffee00'},{dx:0,dy:-4,c:'#ff8800'},{dx:-2,dy:-2,c:'#ff4400'},{dx:2,dy:-3,c:'#ff2200'},{dx:0,dy:-6,c:'#ff6600'}],
+      ];
+      frames[frame].forEach(({dx,dy,c})=>{pc.fillStyle=c;pc.fillRect(cx2+dx*ps,fy+dy*ps,ps,ps);});
+      pc.globalAlpha=0.4+0.3*Math.sin(t*6);
+      pc.fillStyle='#ff6600';pc.fillRect(cx2-ps*2,fy,ps*5,ps);
+      pc.globalAlpha=1;
+    }
+    // WINGS + LIGHTNING — mystic only
+    if(tier==='mystic'){
+      const wy=Math.floor(ch*0.62); // character feet at bottom, mid-body ~60%
+      const spread=Math.floor(2+Math.sin(t*4)*2);
+      const wCols=['#cc44ff','#ff88ff','#8844cc','#ff44ff','#cc88ff'];
+      [[-2-spread,0],[-3-spread,-1],[-4-spread,-2],[-2-spread,-2],[-3-spread,1]].forEach(([dx,dy],i)=>{
+        pc.globalAlpha=0.7+0.25*Math.sin(t*3+i);
+        pc.fillStyle=wCols[i%5];
+        pc.fillRect(cx2+dx*ps,wy+dy*ps,ps,ps);
+      });
+      [[2+spread,0],[3+spread,-1],[4+spread,-2],[2+spread,-2],[3+spread,1]].forEach(([dx,dy],i)=>{
+        pc.globalAlpha=0.7+0.25*Math.sin(t*3+i);
+        pc.fillStyle=wCols[i%5];
+        pc.fillRect(cx2+dx*ps,wy+dy*ps,ps,ps);
+      });
+      pc.globalAlpha=1;
+      if(Math.random()<0.35){
+        const side=Math.random()>0.5?1:-1;
+        const lx=cx2+side*(8+Math.floor(Math.random()*4)*ps);
+        const ly=wy-Math.floor(Math.random()*5)*ps;
+        pc.fillStyle='#ffffff';pc.fillRect(lx,ly,ps,ps*3);
+        pc.fillStyle='#aaaaff';pc.fillRect(lx+side*ps,ly+ps*2,ps,ps);
+      }
+    }
+  }
+}
+
+
+
+// Per-frame portrait canvas redraw (handles async image load)
+function tickPortraitDraw(){
+  const bar=document.getElementById('hero-bar');
+  if(!bar)return;
+  bar.querySelectorAll('.hero-portrait').forEach(el=>{
+    const hid=Number(el.dataset.id);
+    const h=heroes.find(x=>x.id===hid);
+    if(!h)return;
+    const cv=el.querySelector('.portrait-canvas');
+    if(cv) _drawPortraitStatic(cv,h);
+  });
+}
+
+function updateHeroBar(){
+  const bar=document.getElementById('hero-bar');
+  const sorted=[...heroes].sort((a,b)=>_tierRank(a)-_tierRank(b)||a.id-b.id);
+  const current=new Set(heroes.map(h=>h.id));
+  // Remove portraits for dead/gone heroes
+  [...bar.querySelectorAll('.hero-portrait')].forEach(el=>{
+    if(!current.has(Number(el.dataset.id)))el.remove();
+  });
+  _fxCanvases.clear();
+  sorted.forEach(h=>{
+    let el=bar.querySelector(`.hero-portrait[data-id="${h.id}"]`);
+    if(!el){
+      el=document.createElement('div');
+      el.dataset.id=h.id;
+      el.onclick=()=>openHeroPopup(h);
+      // Portrait canvas
+      const cv=document.createElement('canvas');
+      cv.className='portrait-canvas';cv.width=56;cv.height=76;
+      cv.style.cssText='width:56px;height:76px;image-rendering:pixelated;display:block;';
+      el.appendChild(cv);
+      // FX overlay for legend/mystic
+      const tier=_heroTier(h);
+      if(tier==='legend'||tier==='mystic'){
+        const fx=document.createElement('canvas');
+        fx.className='portrait-fx-canvas';
+        fx.width=56;fx.height=76;
+        fx.style.cssText='position:absolute;top:0;left:0;width:56px;height:76px;pointer-events:none;image-rendering:pixelated;';
+        el.appendChild(fx);
+      }
+      // Tier badge
+      if(tier!=='normal'){
+        const badge=document.createElement('div');
+        badge.className=`portrait-tier-badge badge-${tier}`;
+        badge.textContent=tier==='champion'?'★':tier==='legend'?'LGD':'MYS';
+        el.appendChild(badge);
+      }
+      const nameEl=document.createElement('div');nameEl.className='portrait-name';nameEl.textContent=h.nickname;
+      const hpBar=document.createElement('div');hpBar.className='portrait-hp-bar';
+      const hpFill=document.createElement('div');hpFill.className='portrait-hp-fill';hpFill.style.width='100%';
+      hpBar.appendChild(hpFill);
+      const lv=document.createElement('div');lv.className='portrait-level';lv.textContent=h.growLevel;
+      el.appendChild(nameEl);el.appendChild(hpBar);el.prepend(lv);
+    }
+    // Register FX canvas
+    const tier=_heroTier(h);
+    const fx=el.querySelector('.portrait-fx-canvas');
+    if(fx)_fxCanvases.set(h.id,{canvas:fx,tier});
+    // Update tier class
+    el.className='hero-portrait'+(tier!=='normal'?` tier-${tier}`:'');
+    el.dataset.id=h.id;
+    // HP bar
+    const hpFill=el.querySelector('.portrait-hp-fill');
+    if(hpFill)hpFill.style.width=Math.max(0,h.hp/h.maxHp*100)+'%';
+    const lvEl=el.querySelector('.portrait-level');
+    if(lvEl)lvEl.textContent=h.growLevel;
+    el.style.opacity=h.isDead?'0.4':'1';
+    bar.appendChild(el);
+  });
+}
+
+// =============================================
+//  HERO STAT POPUP
+// =============================================
+let _popupHeroId=null;
+function openHeroPopup(h){
+  _popupHeroId=h.id;
+  const popup=document.getElementById('hero-stat-popup');
+  popup.style.display='block';
+  const cv=document.getElementById('ssp-canvas');
+  const pc=cv.getContext('2d');pc.clearRect(0,0,36,64);pc.imageSmoothingEnabled=false;
+  pc.save();
+  pc.rect(0,0,36,64);pc.clip();
+  pc.translate(18,62);
+  drawSwordsman(pc,'idle',0,0.50,true);
+  pc.restore();
+  document.getElementById('ssp-name').textContent=h.nickname+(h.isChampion?' ★':'');
+  document.getElementById('ssp-type').textContent=(h.isChampion?'👑 Champion — ':'')+HERO_CLASSES[h.type]?.label;
+  const cs=HERO_COMBAT[h.type]||HERO_COMBAT.warrior;
+  const atk=cs.attack+(h.weaponAtk||0);
+  document.getElementById('ssp-stats').innerHTML=`
+    <div class="ssp-stat"><div class="ssp-stat-label">ATTACK</div><div class="ssp-stat-val red">${atk}</div></div>
+    <div class="ssp-stat"><div class="ssp-stat-label">DEFENSE</div><div class="ssp-stat-val blue">${cs.defense}</div></div>
+    <div class="ssp-stat"><div class="ssp-stat-label">HP</div><div class="ssp-stat-val">${Math.ceil(h.hp)}/${h.maxHp}</div></div>
+    <div class="ssp-stat"><div class="ssp-stat-label">LEVEL</div><div class="ssp-stat-val purple">${h.growLevel}</div></div>
+    <div class="ssp-stat"><div class="ssp-stat-label">SPEED</div><div class="ssp-stat-val blue">${(h.speedMult||1).toFixed(1)}×</div></div>
+    <div class="ssp-stat"><div class="ssp-stat-label">CLASS</div><div class="ssp-stat-val">${HERO_CLASSES[h.type]?.label||h.type}</div></div>
+  `;
+  // Weapon slot
+  const ws=document.getElementById('ssp-weapon-slot');
+  const inv=G.weaponInventory||[];
+  const equipped=h.equippedWeapon?inv.find(w=>w.uid===h.equippedWeapon):null;
+  // Armor in popup
+  const armorInv=G.armorInventory||[];
+  const equippedArmor=h.equippedArmor?armorInv.find(a=>a.uid===h.equippedArmor):null;
+  let whtml='';
+  if(equipped){
+    whtml=`<div class="ssp-weapon"><div class="ssp-weapon-name ${WEAPON_RARITIES.find(r=>r.name===equipped.rarity)?.css||''}">${equipped.name} [${equipped.rarity}]</div><div class="ssp-weapon-stats">ATK +${_effectiveAtk(equipped)}${equipped.spd?` · SPD ${equipped.spd>0?'+':''}${equipped.spd}`:''}</div><button onclick="unequipWeapon('${equipped.uid}');openHeroPopup(heroes.find(x=>x.id===${h.id}))" style="margin-top:4px;font-family:var(--font);font-size:4px;padding:2px 5px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
+  } else {
+    const avail=inv.filter(w=>!w.equippedBy).slice(0,3);
+    if(avail.length>0){
+      whtml='<div style="font-family:var(--font);font-size:4px;color:#336644;margin:4px 0;">AVAILABLE WEAPONS:</div>';
+      for(const w of avail){
+        const rc=WEAPON_RARITIES.find(r=>r.name===w.rarity)?.css||'';
+        whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><button onclick="equipWeaponToHero('${w.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+      }
+    } else {
+      whtml='<div class="ssp-no-weapon" style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:6px;">— No weapons in inventory —</div>';
+    }
+  }
+  ws.innerHTML=whtml;
+  // Armor slot in hero popup
+  let ahtml='';
+  if(equippedArmor){
+    ahtml=`<div style="font-family:var(--font);font-size:5px;color:#224466;margin-top:5px;padding:4px 5px;background:#040e18;border:1px solid #1a3a5a;display:flex;justify-content:space-between;align-items:center;"><span>🛡 ${equippedArmor.name} DEF+${_effectiveDef(equippedArmor)}</span><button onclick="unequipArmor('${equippedArmor.uid}');openHeroPopup(h)" style="font-family:var(--font);font-size:4px;padding:1px 4px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
+  } else {
+    const availArmor=(G.armorInventory||[]).filter(a=>!a.equippedBy).slice(0,3);
+    if(availArmor.length>0){
+      ahtml='<div style="font-family:var(--font);font-size:4px;color:#224466;margin:4px 0;">AVAILABLE ARMOR:</div>';
+      for(const a of availArmor){
+        const rc=_rarityClass(a.rarity);
+        ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><button onclick="equipArmorToHero('${a.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+      }
+    } else {
+      ahtml='<div style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:4px;">— No armor in inventory —</div>';
+    }
+  }
+  ws.innerHTML+=ahtml;
+  const growCost=Math.floor(80*Math.pow(1.22,h.growLevel));
+  document.getElementById('ssp-grow-cost').textContent=`Cost: ${fmtNum(growCost)} gold`;
+  const growBtn=document.getElementById('ssp-grow-btn');
+  growBtn.disabled=G.resources.gold<growCost;
+  growBtn.onclick=()=>{growHero(h);openHeroPopup(h);};
+}
+function closeHeroPopup(){document.getElementById('hero-stat-popup').style.display='none';_popupHeroId=null;}
+function growHero(h){
+  const cost=Math.floor(80*Math.pow(1.22,h.growLevel));
+  if(G.resources.gold<cost){showMessage(`Need ${fmtNum(cost)} gold to level up ${h.nickname}.`);return;}
+  G.resources.gold-=cost;h.growLevel++;h.maxHp=Math.round(h.maxHp*1.1);h.hp=h.maxHp;
+  for(let i=0;i<6;i++)spawnParticle(h.x,h.y,'#ffcc44');
+  showMessage(`${h.nickname} leveled up to Lv${h.growLevel}!`);
+  updateHeroBar();
+}
+function equipWeaponToHero(wuid,heroId){
+  const w=G.weaponInventory.find(x=>x.uid===wuid);
+  const h=heroes.find(x=>x.id===heroId);
+  if(!w||!h)return;
+  // Unequip any existing
+  if(h.equippedWeapon){const old=G.weaponInventory.find(x=>x.uid===h.equippedWeapon);if(old){old.equippedBy=null;}}
+  w.equippedBy=heroId;h.equippedWeapon=wuid;h.weaponAtk=_effectiveAtk(w);
+  showMessage(`${h.nickname} equipped ${w.name}!`);
+  if(_popupHeroId===heroId)openHeroPopup(h);
+}
+function unequipWeapon(wuid){
+  const w=G.weaponInventory.find(x=>x.uid===wuid);
+  if(!w)return;
+  const h=heroes.find(x=>x.id===w.equippedBy);
+  if(h){h.equippedWeapon=null;h.weaponAtk=0;}
+  w.equippedBy=null;
+}
+
+// =============================================
+//  MERGE / ASCENSION
+// =============================================
+function countHeroesByType(type){return heroes.filter(h=>h.type===type&&!h.isDead&&!h.isChampion&&!h.isLegend&&!h.isMystic).length;}
+function canMerge(type){return countHeroesByType(type)>=10;}
+function countChampions(){return heroes.filter(h=>h.isChampion&&!h.isLegend&&!h.isMystic&&!h.isDead).length;}
+function countLegends(){return heroes.filter(h=>h.isLegend&&!h.isMystic&&!h.isDead).length;}
+
+function doMerge(type){
+  if(!canMerge(type))return;
+  let removed=0;
+  heroes=heroes.filter(h=>{if(h.type===type&&!h.isDead&&!h.isChampion&&!h.isLegend&&!h.isMystic&&removed<10){removed++;return false;}return true;});
+  const champion=new Hero('champion');champion.isChampion=true;champion.growLevel=5;
+  champion.maxHp=HERO_COMBAT.champion.hp;champion.hp=champion.maxHp;
+  champion.attackBase=HERO_COMBAT.champion.attack;champion.defenseBase=HERO_COMBAT.champion.defense;
+  heroes.push(champion);
+  showMessage(`✨ ASCENSION! ${champion.nickname} became a CHAMPION!`,true);
+  addEvoLog(`Champion ${champion.nickname} ascended!`);
+  updateHeroBar();refreshMergeUI();
+}
+function doMergeLegend(){
+  const champs=heroes.filter(h=>h.isChampion&&!h.isLegend&&!h.isMystic&&!h.isDead);
+  if(champs.length<5){showMessage('Need 5 Champions to forge a Legend!');return;}
+  champs.slice(0,5).forEach(c=>{heroes=heroes.filter(h=>h.id!==c.id);});
+  const leg=new Hero('legend');leg.isChampion=true;leg.isLegend=true;leg.growLevel=10;
+  leg.maxHp=HERO_COMBAT.legend.hp;leg.hp=leg.maxHp;
+  leg.attackBase=HERO_COMBAT.legend.attack;leg.defenseBase=HERO_COMBAT.legend.defense;
+  heroes.push(leg);
+  showMessage(`🔥 LEGEND FORGED! ${leg.nickname} transcended as LEGEND!`,true);
+  addEvoLog(`Legend ${leg.nickname} emerged from 5 champions!`);
+  updateHeroBar();refreshMergeUI();
+}
+function doMergeMystic(){
+  const legs=heroes.filter(h=>h.isLegend&&!h.isMystic&&!h.isDead);
+  if(legs.length<3){showMessage('Need 3 Legends to ascend a Mystic!');return;}
+  legs.slice(0,3).forEach(l=>{heroes=heroes.filter(h=>h.id!==l.id);});
+  const mys=new Hero('mystic');mys.isChampion=true;mys.isLegend=true;mys.isMystic=true;mys.growLevel=20;
+  mys.maxHp=HERO_COMBAT.mystic.hp;mys.hp=mys.maxHp;
+  mys.attackBase=HERO_COMBAT.mystic.attack;mys.defenseBase=HERO_COMBAT.mystic.defense;
+  heroes.push(mys);
+  showMessage(`✦ MYSTIC ASCENDED! ${mys.nickname} has become a GOD!`,true);
+  addEvoLog(`Mystic ${mys.nickname} ascended from 3 legends!`);
+  updateHeroBar();refreshMergeUI();
+}
+function openMergeModal(){
+  document.getElementById('merge-modal').style.display='block';
+  refreshMergeUI();
+}
+function closeMergeModal(){document.getElementById('merge-modal').style.display='none';}
+function refreshMergeUI(){
+  const grid=document.getElementById('merge-grid-container');grid.innerHTML='';
+  const classes=['warrior','rogue','mage','paladin','berserker','ranger'];
+  for(const cls of classes){
+    const count=countHeroesByType(cls);const can=count>=10;
+    const btn=document.createElement('button');btn.className='merge-btn confirm';
+    btn.disabled=!can;btn.style.opacity=can?1:0.4;
+    btn.innerHTML=`${HERO_CLASSES[cls]?.label||cls}<br>${count}/10`;
+    btn.onclick=()=>{doMerge(cls);};
+    grid.appendChild(btn);
+  }
+  // Legend merge row
+  const champCount=countChampions();
+  const canLeg=champCount>=5;
+  const legBtn=document.createElement('button');legBtn.className='merge-btn confirm';
+  legBtn.style.cssText=`border-color:#ff4400;color:#ff8844;grid-column:1/-1;opacity:${canLeg?1:0.4}`;
+  legBtn.disabled=!canLeg;
+  legBtn.innerHTML=`🔥 FORGE LEGEND — ${champCount}/5 Champions`;
+  legBtn.onclick=doMergeLegend;
+  grid.appendChild(legBtn);
+  // Mystic merge row
+  const legCount=countLegends();
+  const canMys=legCount>=3;
+  const mysBtn=document.createElement('button');mysBtn.className='merge-btn confirm';
+  mysBtn.style.cssText=`border-color:#cc44ff;color:#dd88ff;grid-column:1/-1;opacity:${canMys?1:0.4}`;
+  mysBtn.disabled=!canMys;
+  mysBtn.innerHTML=`✦ ASCEND MYSTIC — ${legCount}/3 Legends`;
+  mysBtn.onclick=doMergeMystic;
+  grid.appendChild(mysBtn);
+}
+
+// =============================================
+//  RESEARCH UI
+// =============================================
+function refreshResearchUI(){
+  const container=document.getElementById('research-buttons');container.innerHTML='';
+  if(heroes.length<10){container.innerHTML='<div style="font-size:9px;color:#2a5a8a;text-align:center;padding:8px">Research Hall unlocks at 10 party members</div>';return;}
+  for(const[id,node] of Object.entries(RESEARCH_TREE)){
+    const done=G.research.completed[id];
+    const canAfford=Object.entries(node.cost).every(([r,v])=>(G.resources[r]||0)>=v);
+    const btn=document.createElement('button');btn.className='btn';btn.disabled=done||!canAfford;btn.style.opacity=done?0.4:1;
+    const costStr=Object.entries(node.cost).map(([r,v])=>`${fmtNum(v)}${r[0]}`).join('+');
+    btn.innerHTML=`${done?'✓ ':''}${node.label} <span class="cost">${done?'done':costStr}</span>`;
+    btn.onclick=()=>doResearch(id,node);container.appendChild(btn);
+  }
+}
+function doResearch(id,node){
+  if(!Object.entries(node.cost).every(([r,v])=>(G.resources[r]||0)>=v)||G.research.completed[id])return;
+  Object.entries(node.cost).forEach(([r,v])=>{G.resources[r]=Math.max(0,(G.resources[r]||0)-v);});
+  G.research.completed[id]=true;node.effect(G);
+  showMessage(`🔬 Research complete: ${node.label}`,true);refreshResearchUI();
+}
+function refreshRelicUI(){
+  if(!G.relicVault.unlocked)return;
+  // Basic relic upgrades shown in research tab for simplicity
+}
+
+// =============================================
+//  PRESTIGE SYSTEM
+// =============================================
+const PrestigeSystem={
+  canPrestige(){return heroes.length>=30&&G.combat.raidsSurvived>=3;},
+  calcPoints(){return Math.floor(heroes.length*0.2+G.combat.raidsSurvived*2+Object.keys(G.research.completed).length*3);},
+  doPrestige(){
+    const pts=this.calcPoints();
+    G.prestige.totalPoints+=pts;G.prestige.civilizationBonus=G.prestige.totalPoints*0.01;G.prestige.runs++;
+    const savedPrestige=JSON.parse(JSON.stringify(G.prestige));
+    const savedWeapons=G.weaponInventory.filter(w=>w.rarity==='LEGENDARY'||w.rarity==='EPIC').slice(0,3);const savedArmors=(G.armorInventory||[]).filter(a=>a.rarity==='LEGENDARY'||a.rarity==='EPIC').slice(0,2);
+    G=newGame();G.prestige=savedPrestige;G.weaponInventory=savedWeapons;G.armorInventory=savedArmors;
+    heroes=[];monsters=[];portals=[];forges=[];mines=[];conduits=[];
+    WaveSystem.waveNumber=0;WaveSystem.waveActive=false;WaveSystem.countdown=300;
+    showMessage(`✨ PRESTIGE! +${pts} points. Civilization bonus: +${(G.prestige.civilizationBonus*100).toFixed(0)}%`,true);
+    addEvoLog(`Prestige run #${G.prestige.runs} complete!`);
+  }
+};
+
+function _showPrestigeModal(){
+  const modal=document.getElementById('prestige-modal');modal.style.display='block';
+  const pts=PrestigeSystem.calcPoints();
+  document.getElementById('prestige-pts-preview').textContent=`+${pts} pts`;
+  document.getElementById('prestige-desc').textContent=`Reset guild (keep EPIC+ weapons). Gain permanent ${pts*1}% production bonus?`;
+}
+
+// =============================================
+//  SPAWN HELPERS
+// =============================================
+function spawnHero(type='warrior'){
+  if(heroes.length>=MAX_PARTY())return;
+  const h=new Hero(type);heroes.push(h);
+  for(let i=0;i<4;i++)spawnParticle(h.x,h.y,'#44aaff');
+  updateHeroBar();
+}
+function spawnForge(){
+  const x=100+Math.random()*(canvas.width-200);forges.push(new Forge(x));
+  showMessage('⚙ Forge built! Gold production increased.');
+}
+function spawnMine(level){
+  const barH=76;const x=100+Math.random()*(canvas.width-200);
+  mines.push(new CrystalMine(x,canvas.height-barH,level||1));
+  showMessage('⛏ Crystal Mine built!');
+}
+function spawnConduit(){
+  const x=80+Math.random()*(canvas.width-160);conduits.push(new ManaConduit(x));
+  showMessage('📡 Mana Conduit built! Mana generation online.');
+}
+
+// =============================================
+//  MESSAGE SYSTEM
+// =============================================
+function showMessage(text,important=false){
+  const el=document.createElement('div');el.className='message'+(important?' important':'');el.textContent=text;
+  const feed=document.getElementById('messages');feed.appendChild(el);
+  while(feed.children.length>5)feed.removeChild(feed.firstChild);
+  setTimeout(()=>el.remove(),7200);
+}
+function addEvoLog(msg){
+  evoLog.push(msg);
+  const el=document.getElementById('evo-log');
+  el.innerHTML=evoLog.slice(-5).map(m=>`<div class="evo-entry">› ${m}</div>`).join('');
+}
+function showEventBannerFunc(){} // unused
+
+// =============================================
+//  INVENTORY MODAL
+// =============================================
+let _invCurrentTab='weapons';
+
+function openInvModal(){
+  document.getElementById('inv-modal-backdrop').classList.add('open');
+  document.getElementById('inv-nav-btn').classList.add('open');
+  refreshInventoryUI();
+}
+function closeInvModal(){
+  document.getElementById('inv-modal-backdrop').classList.remove('open');
+  document.getElementById('inv-nav-btn').classList.remove('open');
+  closeInvDetail();
+}
+function switchInvTab(tab, btn){
+  _invCurrentTab=tab;
+  document.querySelectorAll('.inv-tab').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  document.getElementById('inv-weapon-list').style.display=tab==='weapons'?'grid':'none';
+  document.getElementById('inv-armor-list').style.display=tab==='armor'?'grid':'none';
+  closeInvDetail();
+}
+function openInvDetail(uid, isArmor){
+  const item=isArmor?(G.armorInventory||[]).find(x=>x.uid===uid):(G.weaponInventory||[]).find(x=>x.uid===uid);
+  if(!item)return;
+  document.getElementById('inv-grid-view').style.display='none';
+  const det=document.getElementById('inv-detail');
+  det.classList.add('open');
+
+  const rc=_rarityClass(item.rarity);
+  const equipped=item.equippedBy!=null;
+  const heroName=equipped?(heroes.find(h=>h.id===item.equippedBy)?.nickname||'?'):'';
+  const atk=!isArmor?_effectiveAtk(item):null;
+  const def=isArmor?_effectiveDef(item):null;
+  const enhLv=item.enhance||0;
+  const maxed=enhLv>=ENHANCE_MAX;
+  const enhCost=!maxed?(isArmor?enhanceCostArmor(enhLv):enhanceCostWeapon(enhLv)):0;
+  const resource=isArmor?'crystal':'gold';
+  const have=isArmor?(G.resources.crystal||0):(G.resources.gold||0);
+  const canAfford=have>=enhCost;
+
+  // Rarity border on the card
+  const rarityBorder={COMMON:'#3a5a7a',UNCOMMON:'#1a6a1a',RARE:'#1a4aaa',EPIC:'#6a1aaa',LEGENDARY:'#aa7a00'};
+  const bc=rarityBorder[item.rarity]||'#1a2a4a';
+
+  document.getElementById('inv-detail-card').style.borderColor=bc;
+  const _card=document.getElementById('inv-detail-card');
+  const _spr=drawWeaponSprite(item.name,item.rarity,56);
+  _spr.style.cssText='display:block;margin:0 auto 6px;';
+  _card.innerHTML=`
+    <div class="det-name ${rc}">${item.name}${enhLv>0?` <span style="color:var(--gold)">+${enhLv}</span>`:''}</div>
+    <div class="det-badge">[${item.rarity}] ${isArmor?'Armor':'Weapon'}</div>
+    ${!isArmor?`<div class="det-stat">ATK: <span style="color:var(--gold)">${atk}</span> (base ${item.atk} + ${enhLv*2} enhance)</div>
+    ${item.spd?`<div class="det-stat">SPD: <span style="color:var(--teal)">${item.spd>0?'+':''}${item.spd}</span></div>`:''}`:
+    `<div class="det-stat">DEF: <span style="color:var(--gold)">${def}</span> (base ${item.def} + ${enhLv*2} enhance)</div>`}
+    ${item.special?`<div class="det-special">Special: ${item.special}</div>`:''}
+    <div class="det-equip-row">
+      ${equipped
+        ?`<span class="det-hero-tag">Equipped: ${heroName}</span>
+          <button class="det-btn unequip" onclick="${isArmor?'unequipArmor':'unequipWeapon'}('${item.uid}');openInvDetail('${item.uid}',${isArmor})">UNEQUIP</button>`
+        :`<button class="det-btn equip" onclick="${isArmor?'autoEquipArmor':'autoEquipWeapon'}('${item.uid}');openInvDetail('${item.uid}',${isArmor})">AUTO-EQUIP</button>`}
+    </div>
+    <div class="det-enh-row">
+      <div>
+        <div class="det-enh-label">ENHANCE</div>
+        ${maxed?'':'<div class="det-enh-cost">Cost: '+enhCost+' '+resource+'</div>'}
+      </div>
+      <div class="det-enh-level">+${enhLv}</div>
+      ${maxed
+        ?`<span class="det-enh-maxed">MAXED</span>`
+        :`<button class="det-enh-btn" ${canAfford?'':'disabled'} onclick="${isArmor?'enhanceArmor':'enhanceWeapon'}('${item.uid}');openInvDetail('${item.uid}',${isArmor})">ENHANCE +1</button>`}
+    </div>`;
+  _card.insertBefore(_spr, _card.firstChild);
+}
+function closeInvDetail(){
+  document.getElementById('inv-grid-view').style.display='block';
+  const det=document.getElementById('inv-detail');
+  det.classList.remove('open');
+}
+
+const RARITY_ORDER={LEGENDARY:0,EPIC:1,RARE:2,UNCOMMON:3,COMMON:4};
+function _rarityClass(r){return WEAPON_RARITIES.find(x=>x.name===r)?.css||'rarity-COMMON';}
+
+function refreshInventoryUI(){
+  const weapons=G.weaponInventory||[];
+  const armors=G.armorInventory||[];
+  const total=weapons.length+armors.length;
+
+  // Update badge counts
+  [document.getElementById('inv-count-badge'),document.getElementById('inv-nav-count')].forEach(el=>{if(el)el.textContent=total;});
+
+  // ── WEAPON GRID ───────────────────────────────────────────────
+  const wList=document.getElementById('inv-weapon-list');
+  if(wList){
+    if(weapons.length===0){
+      wList.innerHTML='<div class="inv-empty-msg" style="grid-column:1/-1">No weapons yet.<br>Defeat enemies to get loot!</div>';
+    } else {
+      wList.innerHTML='';
+      const sorted=[...weapons].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4));
+      for(const w of sorted){
+        const slot=document.createElement('div');
+        slot.className='inv-slot rarity-'+w.rarity+(w.equippedBy!=null?' equipped-slot':'');
+        slot.title=w.name+' ['+w.rarity+'] ATK+'+_effectiveAtk(w);
+        slot.onclick=()=>openInvDetail(w.uid,false);
+        slot.innerHTML=w.enhance>0?`<div class="inv-slot-plus">+${w.enhance}</div>`:'';
+        slot.insertBefore(drawWeaponSprite(w.name,w.rarity,48),slot.firstChild);
+        const wlbl=document.createElement('div');wlbl.className='inv-slot-name';wlbl.textContent=w.name;slot.appendChild(wlbl);
+        wList.appendChild(slot);
+      }
+    }
+  }
+
+  // ── ARMOR GRID ────────────────────────────────────────────────
+  const aList=document.getElementById('inv-armor-list');
+  if(aList){
+    if(armors.length===0){
+      aList.innerHTML='<div class="inv-empty-msg" style="grid-column:1/-1">No armor yet.<br>Kill boss waves to get armor!</div>';
+    } else {
+      aList.innerHTML='';
+      const sorted=[...armors].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4));
+      for(const a of sorted){
+        const slot=document.createElement('div');
+        slot.className='inv-slot rarity-'+a.rarity+(a.equippedBy!=null?' equipped-slot':'');
+        slot.title=a.name+' ['+a.rarity+'] DEF+'+_effectiveDef(a);
+        slot.onclick=()=>openInvDetail(a.uid,true);
+        slot.innerHTML=a.enhance>0?`<div class="inv-slot-plus">+${a.enhance}</div>`:'';
+        slot.insertBefore(drawWeaponSprite(a.name,a.rarity,48),slot.firstChild);
+        const albl=document.createElement('div');albl.className='inv-slot-name';albl.textContent=a.name;slot.appendChild(albl);
+        aList.appendChild(slot);
+      }
+    }
+  }
+}
+
+function autoEquipWeapon(wuid){
+  const w=G.weaponInventory.find(x=>x.uid===wuid);if(!w||w.equippedBy!=null)return;
+  const unarmed=heroes.filter(h=>!h.isDead&&!h.equippedWeapon);
+  if(unarmed.length===0){showMessage('All heroes already have weapons!');return;}
+  const target=unarmed.reduce((a,b)=>a.attackBase<b.attackBase?a:b);
+  equipWeaponToHero(wuid,target.id);refreshInventoryUI();
+}
+
+// =============================================
+//  TIPS
+// =============================================
+function openTipsModal(){
+  document.getElementById('tips-modal').style.display='block';
+  document.getElementById('tips-content').innerHTML=`
+    <b style="color:var(--gold)">GETTING STARTED</b><br>
+    • Recruit heroes from PARTY tab<br>
+    • Heroes auto-farm gold and fight enemies<br>
+    • Build Forges for more gold<br>
+    • Crystal Mines give crystal<br>
+    • Mana Conduits give mana for research<br>
+    <br>
+    <b style="color:var(--orange)">WAVES & COMBAT</b><br>
+    • Every 60s a boss wave spawns enemies<br>
+    • Heroes auto-fight all enemies<br>
+    • Enemies drop weapons on death!<br>
+    • Wave 5, 10, 15... = BOSS WAVES<br>
+    • Bosses drop guaranteed loot + relics<br>
+    <br>
+    <b style="color:var(--purple)">LOOT & ECONOMY</b><br>
+    • Weapons: COMMON > UNCOMMON > RARE > EPIC > LEGENDARY<br>
+    • Equip weapons via hero portrait bar<br>
+    • Ascend 10 same-class heroes → Champion<br>
+    • Champions have 5× stats!<br>
+    <br>
+    <b style="color:var(--teal)">PROGRESSION</b><br>
+    • Research unlocks at 10 party members<br>
+    • Prestige resets but gives permanent bonuses<br>
+    • Relic Vault opens after first relic drop<br>
+  `;
+}
+function closeTipsModal(){document.getElementById('tips-modal').style.display='none';}
+
+// =============================================
+//  DAMAGED BUILDINGS UI
+// =============================================
+function updateDamagedBuildingsUI(){
+  const container=document.getElementById('damaged-buildings');
+  const damaged=[...forges.filter(f=>f.damaged),...mines.filter(m=>m.damaged),...conduits.filter(c=>c.damaged)];
+  if(damaged.length===0){container.innerHTML='<div style="font-family:var(--font);font-size:5px;color:#446677;padding:2px">All operational ✓</div>';return;}
+  container.innerHTML=damaged.map((b,i)=>`<div style="font-family:var(--font);font-size:5px;color:#ff5533;display:flex;justify-content:space-between;padding:2px 0">${b instanceof Forge?'Forge':'Mine'} DAMAGED <button onclick="repairBuilding(${i})" style="font-family:var(--font);font-size:4px;background:#070c18;border:1px solid #2a5a8a;color:var(--teal);cursor:pointer;padding:1px 4px">REPAIR(50g)</button></div>`).join('');
+}
+function repairBuilding(idx){
+  if(G.resources.gold<50)return;G.resources.gold-=50;
+  const damaged=[...forges.filter(f=>f.damaged),...mines.filter(m=>m.damaged),...conduits.filter(c=>c.damaged)];
+  if(damaged[idx])damaged[idx].damaged=false;
+}
+
+// =============================================
+//  UI UPDATE
+// =============================================
+function getCityTier(){
+  const pop=heroes.length;
+  if(pop>=60)return{pop,name:'LEGENDARY GUILD'};
+  if(pop>=40)return{pop,name:'GRAND GUILD'};
+  if(pop>=25)return{pop,name:'RISING GUILD'};
+  if(pop>=15)return{pop,name:'ADVENTURERS\' GUILD'};
+  return{pop,name:'ADVENTURER'};
+}
+
+function updateUI(){
+  const r=G.resources;
+  const tier=getCityTier();
+  document.getElementById('s-pop').textContent=heroes.length;
+  document.getElementById('s-gold').textContent=fmtNum(r.gold||0);
+  document.getElementById('s-data').textContent=fmtNum(r.mana||0);
+  document.getElementById('s-crystal').textContent=fmtNum(r.crystal||0);
+  document.getElementById('s-chaos').textContent=fmtNum(r.chaos||0);
+  document.getElementById('s-relic').textContent=fmtNum(r.relic||0);
+  document.getElementById('s-scrolls').textContent=G.scrolls||0;
+  document.getElementById('s-int').textContent=Math.floor(G.stats.intelligence);
+  document.getElementById('bar-int').style.width=G.stats.intelligence+'%';
+  document.getElementById('bar-chaos').style.width=Math.min(100,r.chaos||0)+'%';
+  document.getElementById('s-prestige').textContent=fmtNum(G.prestige.totalPoints);
+  document.getElementById('tier-name').textContent=tier.name;
+  document.getElementById('s-wall').textContent=G.upgrades.wallLevel;
+  document.getElementById('s-towers').textContent=G.upgrades.towerCount;
+  document.getElementById('s-guardians').textContent=heroes.filter(h=>h.type==='paladin').length;
+  document.getElementById('s-defense').textContent=fmtNum(RaidSystem.calcDefensePower());
+  document.getElementById('s-raids').textContent=G.combat.raidsSurvived;
+
+  // Wave countdown
+  if(!WaveSystem.waveActive){
+    const t=WaveSystem.countdown;
+    const mins=Math.floor(t/600),secs=Math.floor((t%600)/10);
+    document.getElementById('raid-countdown').textContent=`⚔ WAVE IN ${mins}:${String(secs).padStart(2,'0')}`;
+  } else {
+    document.getElementById('raid-countdown').textContent='⚔ WAVE ACTIVE!';
+  }
+
+  // Build tab buttons
+  const costGrow=Math.floor(50*Math.pow(1.15,G.upgrades.growFaster));
+  const costFactory=Math.floor(500*Math.pow(1.25,forges.length));
+  const costDataNode=Math.floor(600*Math.pow(1.35,conduits.length));
+  const costBrewery=Math.floor(800*Math.pow(1.4,0));
+  const gooResvLv=G.upgrades.gooReservoir||0;
+  const costResv=Math.floor(2000*Math.pow(1.5,gooResvLv));
+  const turboLv=G.upgrades.turboCycles||0;
+  const costTurboG=Math.floor(3000*Math.pow(1.6,turboLv));
+  const costTurboC=Math.floor(50*Math.pow(1.5,turboLv));
+  const feastCost=Math.max(500,heroes.length*50);
+
+  _setBtn('btn-grow','cost-grow',costGrow,r.gold,'gold');
+  _setBtn('btn-factory','cost-factory',costFactory,r.gold,'gold');
+
+  const mineBtn=document.getElementById('btn-mine'),mineCostEl=document.getElementById('cost-mine'),mineLabelEl=document.getElementById('mine-btn-label');
+  if(mines.length<3){
+    if(mineLabelEl)mineLabelEl.textContent=`⛏ Build Crystal Mine (${mines.length}/3)`;
+    if(mineCostEl)mineCostEl.textContent='300 gold';
+    if(mineBtn)mineBtn.disabled=r.gold<300;
+  } else {
+    const target=mines.reduce((a,b)=>a.level<=b.level?a:b);
+    const upInfo=target&&target.level<5?CrystalMine.upgradeCost(target.level):null;
+    if(upInfo){const[gc,cc]=upInfo;if(mineLabelEl)mineLabelEl.textContent=`⛏ Upgrade Mine Lv${target.level}→${target.level+1}`;if(mineCostEl)mineCostEl.textContent=cc>0?`${fmtNum(gc)}g+${cc}c`:`${fmtNum(gc)} gold`;if(mineBtn)mineBtn.disabled=r.gold<gc||r.crystal<(cc||0);}
+    else{if(mineLabelEl)mineLabelEl.textContent='⛏ All Mines MAX';if(mineCostEl)mineCostEl.textContent='MAXED';if(mineBtn)mineBtn.disabled=true;}
+  }
+  const dnBtn=document.getElementById('btn-datanode');if(dnBtn){dnBtn.disabled=r.gold<costDataNode;document.getElementById('cost-datanode').textContent=`${fmtNum(costDataNode)} gold`;}
+  const resvBtn=document.getElementById('btn-goo-bank');if(resvBtn){resvBtn.disabled=r.gold<costResv;document.getElementById('cost-goo-bank').textContent=`${fmtNum(costResv)}g — Lv${gooResvLv+1}`;}
+  const turboBtn=document.getElementById('btn-goo-turbo');const costTurboGEl=document.getElementById('cost-goo-turbo');if(turboBtn&&costTurboGEl){turboBtn.disabled=r.gold<costTurboG||r.crystal<costTurboC;costTurboGEl.textContent=`${fmtNum(costTurboG)}g+${fmtNum(costTurboC)}c`;}
+  const feastBtn=document.getElementById('btn-goo-feast');if(feastBtn){feastBtn.disabled=r.gold<feastCost;document.getElementById('cost-goo-feast').textContent=`${fmtNum(feastCost)}g (30s)`;}
+  const mutBtn=document.getElementById('btn-lab');if(mutBtn)mutBtn.disabled=r.gold<1000;
+  const relicUnlockBtn=document.getElementById('btn-relic-unlock');
+  if(G.relicVault.unlocked){relicUnlockBtn.querySelector('.btn-label').textContent='🏛 Relic Vault: OPEN';relicUnlockBtn.disabled=true;}
+  else{relicUnlockBtn.disabled=r.relic<1;document.getElementById('cost-relic-unlock').textContent=r.relic<1?'need 1 relic':'1 relic';}
+  const pBtn=document.getElementById('btn-prestige');const canP=PrestigeSystem.canPrestige();pBtn.disabled=!canP;
+  if(canP)document.getElementById('cost-prestige').textContent=`+${PrestigeSystem.calcPoints()} pts`;
+  else document.getElementById('cost-prestige').textContent='need 30 heroes + 3 waves';
+
+  // Party tab
+  const costWorker=Math.floor(100*(1+heroes.length*0.08));
+  _setBtn('btn-worker','cost-worker',costWorker,r.gold,'gold');
+  _setBtn('btn-researcher','cost-researcher',150,r.gold,'gold');
+  _setBtn('btn-miner','cost-miner',200,r.gold,'gold');
+  const gBtn=document.getElementById('btn-guardian');
+  const costGg=Math.floor(300*Math.pow(1.2,heroes.filter(h=>h.type==='paladin').length));
+  const costGc=Math.floor(30*Math.pow(1.2,heroes.filter(h=>h.type==='paladin').length));
+  gBtn.disabled=r.gold<costGg||r.crystal<costGc;document.getElementById('cost-guardian').textContent=`${fmtNum(costGg)}g+${fmtNum(costGc)}c`;
+  const costIntel=Math.floor(200*Math.pow(1.15,G.upgrades.increaseIntelligence));
+  _setBtn('btn-intel','cost-intel',costIntel,r.gold,'gold');
+  document.getElementById('s-pop2').textContent=heroes.length+'/'+MAX_PARTY();
+  document.getElementById('s-angel').textContent=heroes.filter(h=>h.isChampion).length;
+  document.getElementById('s-goorate').textContent=fmtNum(Math.max(0,G._goldRate||0))+'/s';
+
+  // Wall/Tower
+  const costWall={gold:Math.floor(400*Math.pow(1.35,G.upgrades.wallLevel)),crystal:Math.floor(30*Math.pow(1.35,G.upgrades.wallLevel))};
+  const costTower={gold:Math.floor(800*Math.pow(1.4,G.upgrades.towerCount)),crystal:Math.floor(50*Math.pow(1.4,G.upgrades.towerCount))};
+  const wallBtn=document.getElementById('btn-wall'),towerBtn=document.getElementById('btn-tower');
+  wallBtn.disabled=r.gold<costWall.gold||r.crystal<costWall.crystal;document.getElementById('cost-wall').textContent=`${fmtNum(costWall.gold)}g+${fmtNum(costWall.crystal)}c`;
+  towerBtn.disabled=r.gold<costTower.gold||r.crystal<costTower.crystal;document.getElementById('cost-tower').textContent=`${fmtNum(costTower.gold)}g+${fmtNum(costTower.crystal)}c`;
+
+  // Mobile HUD
+  document.getElementById('hud-gold').textContent=fmtNum(r.gold||0);
+  document.getElementById('hud-pop').textContent=heroes.length;
+  document.getElementById('hud-crystal').textContent=fmtNum(r.crystal||0);
+  document.getElementById('hud-chaos').textContent=fmtNum(r.chaos||0);
+  const ago=Math.floor((Date.now()-G.savedAt)/1000);
+  document.getElementById('last-save').textContent=ago<5?'saved':`${ago}s ago`;
+
+  refreshResearchUI();
+  updateDamagedBuildingsUI();
+}
+function _setBtn(btnId,costId,cost,have,res){
+  const btn=document.getElementById(btnId),cEl=document.getElementById(costId);
+  if(cEl)cEl.textContent=fmtNum(Math.floor(cost))+(res==='gold'?' gold':'');
+  if(btn)btn.disabled=have<cost;
+}
+
+// =============================================
+//  PRODUCTION TICK
+// =============================================
+function tickProduction(){
+  const presBoost=1+(G.prestige.civilizationBonus||0);
+  const goldBefore=G.resources.gold||0;
+
+  // Hero passive production
+  for(const h of heroes){
+    if(h.isDead)continue;
+    const cls=HERO_CLASSES[h.type]||HERO_CLASSES.warrior;
+    for(const[res,rate] of Object.entries(cls.prod||{})){
+      const actual=rate*h.goldMult*(G.goldMult||1)*(res==='mana'?G.manaMult||1:1)*presBoost*(1+(G.relicBonuses.gooBoost||0))*(h.type==='champion'?(G.relicBonuses.championMult||1):1);
+      if(res==='gold')G.resources.gold=(G.resources.gold||0)+actual/10;
+      else if(res==='mana')G.resources.mana=(G.resources.mana||0)+actual/10;
+      else if(res==='crystal')G.resources.crystal=(G.resources.crystal||0)+actual/10;
+      else if(res==='chaos')G.resources.chaos=Math.min(100,(G.resources.chaos||0)+actual/10);
+      else if(res==='defense'){}// handled elsewhere
+    }
+  }
+  // Chaos → Gold conversion
+  if(G.relicBonuses.chaosConvert&&G.resources.chaos>5){G.resources.gold=(G.resources.gold||0)+G.resources.chaos*0.1;G.resources.chaos=Math.max(0,G.resources.chaos-0.5);}
+
+  // Gold rate calculation
+  const goldAfter=G.resources.gold||0;
+  TICK_GOLD_SAMPLE.push(goldAfter-goldBefore);if(TICK_GOLD_SAMPLE.length>100)TICK_GOLD_SAMPLE.shift();
+  G._goldRate=TICK_GOLD_SAMPLE.reduce((a,b)=>a+b,0)*10;
+
+  // Event tick
+  if(G.activeEvent){G.eventTimer--;if(G.eventTimer<=0){clearEvent();}}
+  // Random events
+  if(G.tick%1500===0&&Math.random()<0.3)triggerEvent();
+  // Intelligence
+  G.stats.intelligence=Math.min(100,G.stats.intelligence+heroes.length*0.0001);
+  // Heal dead heroes slowly
+  for(const h of heroes){if(h.isDead&&Math.random()<0.002){h.isDead=false;h.hp=Math.floor(h.maxHp*0.3);h.animState='idle';h.animFrame=0;showMessage(`${h.nickname} recovered!`);}}
+  // Camp repair
+  CombatSystem.repairCity();
+}
+
+// =============================================
+//  RAID RESULT POPUP
+// =============================================
+function _showRaidResult(){
+  const modal=document.getElementById('raid-modal');
+  const results=document.getElementById('raid-modal-results');
+  const waveNum=WaveSystem.waveNumber;
+  const weapons=G.weaponInventory.slice(-3);
+  results.innerHTML=`
+    <div class="raid-result-row"><span>Wave #${waveNum} Cleared</span><span class="val good">✓</span></div>
+    <div class="raid-result-row"><span>Total Waves Survived</span><span class="val good">${G.combat.raidsSurvived}</span></div>
+    <div class="raid-result-row"><span>Loot Drops</span><span class="val good">${weapons.length>0?weapons.map(w=>w.name).join(', '):'—'}</span></div>
+    <div class="raid-result-row"><span>Gold Earned</span><span class="val good">+${fmtNum(G.resources.gold|0)}</span></div>
+  `;
+  modal.style.display='block';
+}
+
+// =============================================
+//  SAVE / LOAD
+// =============================================
+function saveGame(){
+  const data={G,heroCount:heroes.length,heroTypes:heroes.map(h=>({type:h.type,growLevel:h.growLevel,isChampion:h.isChampion,isLegend:h.isLegend||false,isMystic:h.isMystic||false,equippedWeapon:h.equippedWeapon,equippedArmor:h.equippedArmor})),forgeCount:forges.length,mineData:mines.map(m=>m.level),conduitCount:conduits.length,waveNum:WaveSystem.waveNumber,waveRaidsSurvived:G.combat.raidsSurvived};
+  localStorage.setItem(SAVE_KEY,JSON.stringify(data));G.savedAt=Date.now();
+  showMessage('💾 Game saved!');
+}
+function loadGame(){
+  const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;
+  try{
+    const data=JSON.parse(raw);G=Object.assign(newGame(),data.G);
+    // Rebuild heroes
+    if(data.heroTypes){for(const hd of data.heroTypes){
+      const h=new Hero(hd.type);
+      h.growLevel=hd.growLevel||1;
+      h.isChampion=hd.isChampion||false;
+      h.isLegend=hd.isLegend||false;
+      h.isMystic=hd.isMystic||false;
+      h.equippedWeapon=hd.equippedWeapon||null;
+      if(h.equippedWeapon){const w=G.weaponInventory.find(x=>x.uid===h.equippedWeapon);if(w)h.weaponAtk=_effectiveAtk(w);}
+      h.equippedArmor=hd.equippedArmor||null;
+      if(h.equippedArmor){if(!G.armorInventory)G.armorInventory=[];const ar=G.armorInventory.find(x=>x.uid===h.equippedArmor);if(ar)h.armorDef=_effectiveDef(ar);}
+      // Restore correct combat stats based on tier
+      if(h.isMystic){h.maxHp=HERO_COMBAT.mystic.hp;h.attackBase=HERO_COMBAT.mystic.attack;h.defenseBase=HERO_COMBAT.mystic.defense;}
+      else if(h.isLegend){h.maxHp=HERO_COMBAT.legend.hp;h.attackBase=HERO_COMBAT.legend.attack;h.defenseBase=HERO_COMBAT.legend.defense;}
+      else if(h.isChampion){h.maxHp=HERO_COMBAT.champion.hp;h.attackBase=HERO_COMBAT.champion.attack;h.defenseBase=HERO_COMBAT.champion.defense;}
+      h.hp=h.maxHp;
+      heroes.push(h);
+    }}
+    for(let i=0;i<(data.forgeCount||0);i++)spawnForge();
+    if(data.mineData){for(const lv of data.mineData)spawnMine(lv);}
+    for(let i=0;i<(data.conduitCount||0);i++)spawnConduit();
+    WaveSystem.waveNumber=data.waveNum||0;
+    document.getElementById('wave-number').textContent='WAVE '+(WaveSystem.waveNumber||0);
+    // Offline production
+    const offlineMs=Math.min(Date.now()-G.savedAt,4*3600*1000);
+    if(offlineMs>30000){
+      const offlineSecs=offlineMs/1000;
+      const goldGained=Math.floor(offlineSecs*(G._goldRate||1)*0.5);
+      G.resources.gold=(G.resources.gold||0)+goldGained;
+      const offlineEl=document.getElementById('offline-results');
+      offlineEl.textContent=`Away for ${Math.floor(offlineSecs/60)}min. +${fmtNum(goldGained)} gold (50% idle rate)`;
+      document.getElementById('offline-popup').style.display='block';
+    }
+    showMessage('Game loaded!');return true;
+  }catch(e){console.error('Load failed',e);return false;}
+}
+
+
+// =============================================
+//  BUTTON HANDLERS
+// =============================================
+function initButtons(){
+  document.getElementById('btn-grow').onclick=()=>{const c=Math.floor(50*Math.pow(1.15,G.upgrades.growFaster));if(G.resources.gold<c)return;G.resources.gold-=c;G.upgrades.growFaster++;WaveSystem.countdownMax=Math.max(150,WaveSystem.countdownMax-10);showMessage('Camp upgraded! Wave intervals shortened.');};
+  document.getElementById('btn-factory').onclick=()=>{const c=Math.floor(500*Math.pow(1.25,forges.length));if(G.resources.gold<c)return;G.resources.gold-=c;spawnForge();};
+  document.getElementById('btn-mine').onclick=()=>{
+    if(mines.length<3){if(G.resources.gold<300)return;G.resources.gold-=300;spawnMine(1);}
+    else{const target=mines.reduce((a,b)=>a.level<=b.level?a:b);const upInfo=target&&target.level<5?CrystalMine.upgradeCost(target.level):null;if(!upInfo)return;const[gc,cc]=upInfo;if(G.resources.gold<gc||G.resources.crystal<(cc||0))return;G.resources.gold-=gc;G.resources.crystal-=cc||0;target.upgrade();showMessage(`Crystal Mine upgraded to Lv${target.level}!`);}
+  };
+  document.getElementById('btn-datanode').onclick=()=>{const c=Math.floor(600*Math.pow(1.35,conduits.length));if(G.resources.gold<c)return;G.resources.gold-=c;spawnConduit();};
+  document.getElementById('btn-brewery').onclick=()=>{};  // repurpose later
+  document.getElementById('btn-lab2').onclick=()=>{};     // repurpose later
+  document.getElementById('btn-goo-bank').onclick=()=>{const c=Math.floor(2000*Math.pow(1.5,G.upgrades.gooReservoir||0));if(G.resources.gold<c)return;G.resources.gold-=c;G.upgrades.gooReservoir=(G.upgrades.gooReservoir||0)+1;showMessage('Gold Vault upgraded! Party capacity +10.');};
+  document.getElementById('btn-goo-turbo').onclick=()=>{const gc=Math.floor(3000*Math.pow(1.6,G.upgrades.turboCycles||0));const cc=Math.floor(50*Math.pow(1.5,G.upgrades.turboCycles||0));if(G.resources.gold<gc||G.resources.crystal<cc)return;G.resources.gold-=gc;G.resources.crystal-=cc;G.upgrades.turboCycles=(G.upgrades.turboCycles||0)+1;G.relicBonuses.buildingSpeed=(G.relicBonuses.buildingSpeed||0)+0.5;showMessage('Forges turbo-charged! +50% production speed.');};
+  document.getElementById('btn-goo-feast').onclick=()=>{const c=Math.max(500,heroes.length*50);if(G.resources.gold<c)return;G.resources.gold-=c;G.goldMult=3;setTimeout(()=>{G.goldMult=1;},30000);showMessage('🍖 Grand Feast! Gold ×3 for 30s!',true);};
+  document.getElementById('btn-lab').onclick=()=>{if(G.resources.gold<1000)return;G.resources.gold-=1000;showMessage('⚗ Alchemy Lab built! More drops incoming.',true);G.relicBonuses.relicDropBoost=(G.relicBonuses.relicDropBoost||0)+0.05;};
+  document.getElementById('btn-relic-unlock').onclick=()=>{if(G.resources.relic<1)return;G.resources.relic-=1;G.relicVault.unlocked=true;showMessage('🏛 Relic Vault unlocked!',true);};
+  document.getElementById('btn-prestige').onclick=()=>{if(!PrestigeSystem.canPrestige())return;_showPrestigeModal();};
+  document.getElementById('prestige-confirm').onclick=()=>{PrestigeSystem.doPrestige();document.getElementById('prestige-modal').style.display='none';};
+  document.getElementById('prestige-cancel').onclick=()=>document.getElementById('prestige-modal').style.display='none';
+  document.getElementById('btn-save').onclick=()=>saveGame();
+  document.getElementById('btn-worker').onclick=()=>{const c=Math.floor(100*(1+heroes.length*0.08));if(G.resources.gold<c)return;G.resources.gold-=c;spawnHero('warrior');};
+  document.getElementById('btn-researcher').onclick=()=>{if(G.resources.gold<150)return;G.resources.gold-=150;spawnHero('mage');};
+  document.getElementById('btn-miner').onclick=()=>{if(G.resources.gold<200)return;G.resources.gold-=200;spawnHero('rogue');};
+  document.getElementById('btn-guardian').onclick=()=>{const gc=Math.floor(300*Math.pow(1.2,heroes.filter(h=>h.type==='paladin').length));const cc=Math.floor(30*Math.pow(1.2,heroes.filter(h=>h.type==='paladin').length));if(G.resources.gold<gc||G.resources.crystal<cc)return;G.resources.gold-=gc;G.resources.crystal-=cc;spawnHero('paladin');};
+  document.getElementById('btn-intel').onclick=()=>{const c=Math.floor(200*Math.pow(1.15,G.upgrades.increaseIntelligence));if(G.resources.gold<c)return;G.resources.gold-=c;G.upgrades.increaseIntelligence=(G.upgrades.increaseIntelligence||0)+1;G.stats.intelligence=Math.min(100,(G.stats.intelligence||0)+8);showMessage('Guild Training complete! Rank up.');};
+  document.getElementById('btn-wall').onclick=()=>{const gc=Math.floor(400*Math.pow(1.35,G.upgrades.wallLevel));const cc=Math.floor(30*Math.pow(1.35,G.upgrades.wallLevel));if(G.resources.gold<gc||G.resources.crystal<cc)return;G.resources.gold-=gc;G.resources.crystal-=cc;G.upgrades.wallLevel++;showMessage(`Wall upgraded to Lv${G.upgrades.wallLevel}!`);};
+  document.getElementById('btn-tower').onclick=()=>{const gc=Math.floor(800*Math.pow(1.4,G.upgrades.towerCount));const cc=Math.floor(50*Math.pow(1.4,G.upgrades.towerCount));if(G.resources.gold<gc||G.resources.crystal<cc)return;G.resources.gold-=gc;G.resources.crystal-=cc;G.upgrades.towerCount++;showMessage(`Defense Tower built! Total: ${G.upgrades.towerCount}`);};
+  document.getElementById('raid-modal-close').onclick=()=>document.getElementById('raid-modal').style.display='none';
+  document.getElementById('offline-close-btn').onclick=()=>document.getElementById('offline-popup').style.display='none';
+
+  // Tab switching
+  document.querySelectorAll('.ui-tab').forEach(btn=>{
+    btn.onclick=()=>{const tab=btn.dataset.tab;document.querySelectorAll('.ui-tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');const panel=document.getElementById(tab);if(panel)panel.classList.add('active');};
+  });
+
+  // Toggle UI
+  document.getElementById('ui-toggle').onclick=()=>{
+    const panels=document.getElementById('ui').querySelectorAll('.tab-panel,.ui-tabs,.stat-row,.divider,.stat-bar-wrap,#s-event,#raid-countdown');
+    _uiHidden=!_uiHidden;panels.forEach(p=>{p.style.display=_uiHidden?'none':'';});
+    document.getElementById('ui-toggle').textContent=_uiHidden?'▼ show':'▲ hide';
+  };
+
+  // Mobile menu
+  document.getElementById('hud-menu-btn').onclick=()=>{
+    const uiEl=document.getElementById('ui'),bk=document.getElementById('ui-backdrop');
+    uiEl.classList.toggle('open');bk.classList.toggle('open');
+  };
+  document.getElementById('ui-backdrop').onclick=()=>{
+    document.getElementById('ui').classList.remove('open');document.getElementById('ui-backdrop').classList.remove('open');
+  };
+
+  // Close inv modal on backdrop click
+  document.getElementById('inv-modal-backdrop').onclick=function(e){if(e.target===this)closeInvModal();};
+}
+
+// =============================================
+//  MAIN GAME LOOP
+// =============================================
+let _lastTick=0,_uiTick=0;
+function gameLoop(ts){
+  requestAnimationFrame(gameLoop);
+  if(ts-_lastTick<TICK_MS){
+    // Still draw every frame for smooth animation
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawBackground();
+    drawGround();
+    tickPortraitFX();
+    tickPortraitDraw();
+    for(const f of forges)f.draw();
+    for(const m of mines)m.draw();
+    for(const c of conduits)c.draw();
+    for(const p of portals)p.draw();
+    // Draw heroes sorted by Y (depth)
+    const sorted=[...heroes].sort((a,b)=>a.y-b.y);
+    for(const h of sorted)h.draw();
+    for(const m of monsters)m.draw();
+    drawParticles();drawFloatTexts();
+    return;
+  }
+  _lastTick=ts;
+  G.tick++;
+
+  // Update
+  tickProduction();
+  WaveSystem.tick();
+  for(const f of forges)f.update();
+  for(const m of mines)m.update();
+  for(const c of conduits)c.update();
+  for(const p of portals)p.update();
+  for(const h of heroes)h.update();
+  for(const m of monsters)m.update();
+  updateParticles();updateFloatTexts();
+
+  // UI updates (every 3 ticks)
+  _uiTick++;
+  if(_uiTick%3===0){updateUI();updateHeroBar();}
+
+  // Auto-save every 600 ticks
+  if(G.tick%600===0)saveGame();
+
+  // Draw
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBackground();
+  drawGround();
+  for(const f of forges)f.draw();
+  for(const m of mines)m.draw();
+  for(const c of conduits)c.draw();
+  for(const p of portals)p.draw();
+  const sorted=[...heroes].sort((a,b)=>a.y-b.y);
+  for(const h of sorted)h.draw();
+  for(const m of monsters)m.draw();
+  drawParticles();drawFloatTexts();
+}
+
+// =============================================
+//  INIT
+// =============================================
+window.addEventListener('load',()=>{
+  canvas=document.getElementById('gameCanvas');
+  ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  resizeCanvas();
+  window.addEventListener('resize',resizeCanvas);
+  loadSprites();
+  initButtons();
+
+  // Draw pixel bag icon
+  (function(){
+    const bc=document.getElementById('bag-icon-canvas');
+    if(!bc)return;
+    const bx=bc.getContext('2d');
+    bx.imageSmoothingEnabled=false;
+    const p=(x,y,c)=>{bx.fillStyle=c;bx.fillRect(x,y,1,1);};
+    p(5,2,'#aa7a00');p(6,1,'#aa7a00');p(7,1,'#aa7a00');p(8,1,'#aa7a00');p(9,2,'#aa7a00');
+    for(let x=3;x<=12;x++){p(x,3,'#cc9900');p(x,13,'#7a5500');}
+    for(let y=4;y<=12;y++){p(3,y,'#7a5500');p(12,y,'#7a5500');}
+    for(let x=4;x<=11;x++)for(let y=4;y<=12;y++)p(x,y,y<7?'#ddaa22':'#cc9900');
+    for(let x=4;x<=11;x++){p(x,4,'#ffcc44');p(x,5,'#ffcc44');p(x,6,'#ddaa22');}
+    p(7,5,'#7a5500');p(8,5,'#7a5500');p(7,6,'#cc7700');p(8,6,'#cc7700');
+    p(4,4,'#ffee88');p(5,4,'#ffee88');
+  })();
+
+  // Game loop starts immediately (renders title screen / auth overlay)
+  // Actual game data is loaded by Firebase auth state listener
+  requestAnimationFrame(gameLoop);
+  setInterval(()=>{refreshInventoryUI();},2000);
+});
+
+// =============================================
+//  FIREBASE AUTH + CLOUD SAVE
+// =============================================
+const firebaseConfig = {
+  apiKey: "AIzaSyCoMlzPFlTMx7xpdx2GZGk-fsmPQEQbKUQ",
+  authDomain: "reade-71704.firebaseapp.com",
+  projectId: "reade-71704",
+  storageBucket: "reade-71704.firebasestorage.app",
+  messagingSenderId: "557293025540",
+  appId: "1:557293025540:web:362e51757ac9d773987851",
+  measurementId: "G-65YPSJ278E"
+};
+
+firebase.initializeApp(firebaseConfig);
+const _auth = firebase.auth();
+const _db   = firebase.firestore();
+
+let _currentUser = null;
+let _cloudSaveTimer = null;
+
+// ── Login button ──────────────────────────────
+document.getElementById('btn-google-login').onclick = () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  _auth.signInWithPopup(provider).catch(err => {
+    console.error('Login failed:', err);
+    alert('Login failed: ' + err.message);
+  });
+};
+
+// ── Logout button ────────────────────────────
+document.getElementById('btn-logout').onclick = () => {
+  if(confirm('Sign out? Your progress is saved in the cloud.')) {
+    _auth.signOut();
+  }
+};
+
+// ── Auth state listener ──────────────────────
+_auth.onAuthStateChanged(async user => {
+  if (user) {
+    _currentUser = user;
+    // Show user bar, hide overlay
+    document.getElementById('auth-overlay').style.display = 'none';
+    const bar = document.getElementById('auth-user-bar');
+    bar.style.display = 'flex';
+    document.getElementById('auth-avatar').src = user.photoURL || '';
+    document.getElementById('auth-user-name').textContent = user.displayName || user.email;
+    _setCloudStatus('loading...');
+
+    // Try cloud load first, fall back to localStorage
+    const loaded = await _cloudLoad();
+    if (!loaded) {
+      // No cloud save — try localStorage, then fresh start
+      const localLoaded = loadGame();
+      if (!localLoaded) {
+        G.resources.gold = 200;
+        spawnHero('warrior'); spawnHero('warrior'); spawnHero('rogue');
+        showMessage('⚔ Welcome to Blade Idle!', true);
+        addEvoLog('Adventure begins!');
+      }
+    }
+    updateUI(); updateHeroBar();
+
+    // Auto cloud-save every 10 minutes
+    if (_cloudSaveTimer) clearInterval(_cloudSaveTimer);
+    _cloudSaveTimer = setInterval(() => _cloudSave(), 10 * 60 * 1000);
+
+  } else {
+    _currentUser = null;
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('auth-user-bar').style.display = 'none';
+    if (_cloudSaveTimer) { clearInterval(_cloudSaveTimer); _cloudSaveTimer = null; }
+  }
+});
+
+// ── Cloud save ───────────────────────────────
+async function _cloudSave() {
+  if (!_currentUser) return;
+  try {
+    _setCloudStatus('saving...');
+    const data = {
+      G, 
+      heroCount: heroes.length,
+      heroTypes: heroes.map(h => ({
+        type: h.type, growLevel: h.growLevel,
+        isChampion: h.isChampion, isLegend: h.isLegend||false, isMystic: h.isMystic||false,
+        equippedWeapon: h.equippedWeapon, equippedArmor: h.equippedArmor
+      })),
+      forgeCount: forges.length,
+      mineData: mines.map(m => m.level),
+      conduitCount: conduits.length,
+      waveNum: WaveSystem.waveNumber,
+      waveRaidsSurvived: G.combat.raidsSurvived,
+      savedAt: Date.now()
+    };
+    await _db.collection('saves').doc(_currentUser.uid).set(data);
+    // Also keep localStorage as backup
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    G.savedAt = Date.now();
+    _setCloudStatus('☁ saved');
+    setTimeout(() => _setCloudStatus('☁'), 3000);
+  } catch(err) {
+    console.error('Cloud save failed:', err);
+    _setCloudStatus('⚠ offline');
+  }
+}
+
+// ── Cloud load ───────────────────────────────
+async function _cloudLoad() {
+  if (!_currentUser) return false;
+  try {
+    const doc = await _db.collection('saves').doc(_currentUser.uid).get();
+    if (!doc.exists) { _setCloudStatus('☁ new'); return false; }
+    const data = doc.data();
+    _applyLoadedData(data);
+    _setCloudStatus('☁ loaded');
+    showMessage('☁ Cloud save loaded!', true);
+    return true;
+  } catch(err) {
+    console.error('Cloud load failed:', err);
+    _setCloudStatus('⚠ offline');
+    return false;
+  }
+}
+
+// ── Apply loaded data (shared by cloud + local load) ──
+function _applyLoadedData(data) {
+  G = Object.assign(newGame(), data.G);
+  heroes.length = 0; monsters.length = 0;
+  forges.length = 0; mines.length = 0; conduits.length = 0;
+  if (data.heroTypes) {
+    for (const hd of data.heroTypes) {
+      const h = new Hero(hd.type);
+      h.growLevel = hd.growLevel || 1;
+      h.isChampion = hd.isChampion || false;
+      h.isLegend   = hd.isLegend   || false;
+      h.isMystic   = hd.isMystic   || false;
+      h.equippedWeapon = hd.equippedWeapon || null;
+      if (h.equippedWeapon) { const w = G.weaponInventory.find(x=>x.uid===h.equippedWeapon); if(w) h.weaponAtk = _effectiveAtk(w); }
+      h.equippedArmor  = hd.equippedArmor  || null;
+      if (h.equippedArmor)  { if(!G.armorInventory)G.armorInventory=[]; const ar = G.armorInventory.find(x=>x.uid===h.equippedArmor); if(ar) h.armorDef = _effectiveDef(ar); }
+      if (h.isMystic)       { h.maxHp=HERO_COMBAT.mystic.hp;   h.attackBase=HERO_COMBAT.mystic.attack;   h.defenseBase=HERO_COMBAT.mystic.defense; }
+      else if (h.isLegend)  { h.maxHp=HERO_COMBAT.legend.hp;   h.attackBase=HERO_COMBAT.legend.attack;   h.defenseBase=HERO_COMBAT.legend.defense; }
+      else if (h.isChampion){ h.maxHp=HERO_COMBAT.champion.hp; h.attackBase=HERO_COMBAT.champion.attack; h.defenseBase=HERO_COMBAT.champion.defense; }
+      h.hp = h.maxHp;
+      heroes.push(h);
+    }
+  }
+  for (let i = 0; i < (data.forgeCount||0); i++) spawnForge();
+  if (data.mineData) { for (const lv of data.mineData) spawnMine(lv); }
+  for (let i = 0; i < (data.conduitCount||0); i++) spawnConduit();
+  WaveSystem.waveNumber = data.waveNum || 0;
+  const waveEl = document.getElementById('wave-number');
+  if (waveEl) waveEl.textContent = 'WAVE ' + (WaveSystem.waveNumber||0);
+}
+
+// ── Hook save button to cloud save ───────────
+const _origBtnSave = document.getElementById('btn-save');
+if (_origBtnSave) {
+  _origBtnSave.onclick = () => {
+    saveGame(); // localStorage backup
+    _cloudSave();
+  };
+}
+
+// ── Also cloud-save on auto-save ticks ───────
+const _origSaveGame = saveGame;
+window.saveGame = function() {
+  _origSaveGame();
+  if (_currentUser) _cloudSave();
+};
+
+function _setCloudStatus(msg) {
+  const el = document.getElementById('cloud-save-status');
+  if (el) el.textContent = msg;
+}
+
+</script>
+</body>
+</html>
