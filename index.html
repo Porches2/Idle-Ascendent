@@ -67,7 +67,7 @@ body{background:var(--bg);color:#8aacca;font-family:var(--font);overflow:hidden;
 .sink-section-label{font-family:var(--font);font-size:5px;color:#2a5588;letter-spacing:1px;text-transform:uppercase;margin:5px 0 2px;opacity:0.9;}
 
 /* ── MESSAGES ── */
-#messages{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,85vw);pointer-events:none;z-index:50;display:flex;flex-direction:column;gap:4px;align-items:center;}
+#messages{position:fixed;top:calc(50% - 50px);left:50%;transform:translate(-50%,-50%);width:min(420px,85vw);pointer-events:none;z-index:50;display:flex;flex-direction:column;gap:4px;align-items:center;}
 .message{background:rgba(5,10,20,0.95);border:2px solid #1a3a5a;font-family:var(--font);font-size:6px;color:#8aacca;padding:6px 14px;text-align:center;animation:fadeMsg 7.2s forwards;box-shadow:2px 2px 0 #020508;}
 .message.important{border-color:var(--gold);color:var(--gold);}
 @keyframes fadeMsg{0%{opacity:0;transform:scale(0.9)}5%{opacity:1;transform:scale(1)}85%{opacity:1}100%{opacity:0}}
@@ -290,6 +290,8 @@ body{background:var(--bg);color:#8aacca;font-family:var(--font);overflow:hidden;
 .inv-slot.equipped-slot::after{
   content:'E';position:absolute;top:2px;right:3px;
   font-family:var(--font);font-size:4px;color:var(--gold);
+  z-index:10;pointer-events:none;
+  background:rgba(5,8,18,0.75);padding:1px 2px;
 }
 .inv-slot-icon{font-size:20px;line-height:1;}
 .inv-slot canvas{image-rendering:pixelated;display:block;}
@@ -1530,7 +1532,7 @@ const RaidSystem={
 //  RESOURCE / PRODUCTION BUILDINGS
 // =============================================
 class Forge {
-  constructor(x){this.x=x;const barH=76;this.baseH=window.innerHeight-barH;this.level=1;this.timer=0;this.animT=0;this.damaged=false;}
+  constructor(x){this.x=x;this.baseH=window.innerHeight-110;this.level=1;this.timer=0;this.animT=0;this.damaged=false;}
   update(){
     this.animT++;this.timer++;
     const speed=1+(G.relicBonuses.buildingSpeed||0);
@@ -1597,7 +1599,7 @@ class CrystalMine {
 }
 
 class ManaConduit {
-  constructor(x){this.x=x;const barH=76;this.baseH=window.innerHeight-barH;this.timer=0;this.animT=0;this.damaged=false;}
+  constructor(x){this.x=x;this.baseH=window.innerHeight-110;this.timer=0;this.animT=0;this.damaged=false;}
   update(){
     this.animT++;this.timer++;
     if(this.timer>=12){this.timer=0;const out=3*(1+(G.relicBonuses.dataBoost||0));G.resources.mana+=(G.resources.mana||0),G.resources.mana=(G.resources.mana||0)+(this.damaged?out*0.5:out);}
@@ -1811,20 +1813,113 @@ function drawBackground(){
 }
 
 function _drawCamp(){
-  const barH=76,cx=Math.round(canvas.width/2),gy=canvas.height-barH-10;
-  // Flag
-  ctx.fillStyle='#1a2a4a';ctx.fillRect(cx-2,gy-80,4,80);
-  ctx.fillStyle='#ff8844';ctx.fillRect(cx+2,gy-78,20,14);
-  ctx.fillStyle='#cc5522';ctx.fillRect(cx+2,gy-64,20,3);
-  // Palisade walls
-  for(let i=-3;i<=3;i++){const wx=cx+i*22;ctx.fillStyle='#1c2a1c';ctx.fillRect(wx-5,gy-30,10,30);ctx.fillStyle='#243224';ctx.fillRect(wx-4,gy-32,8,4);}
-  // Gate
-  ctx.fillStyle='#141e14';ctx.fillRect(cx-14,gy-25,28,25);ctx.fillStyle='#0a140a';ctx.fillRect(cx-12,gy-22,24,22);
-  // Camp health bar
+  const cx=Math.round(canvas.width/2);
+  const gy=canvas.height-110; // ground level (matches WALK_Y)
+  const t=Date.now()/1000;
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+
+  // ── Grass patch under camp ──
+  ctx.fillStyle='#1a3a18';ctx.fillRect(cx-64,gy-110,128,110);
+  // grass texture dots
+  for(let i=0;i<18;i++){
+    const gx=cx-58+i*7,gy2=gy-18+((i*13)%20);
+    ctx.fillStyle=i%3===0?'#2a5022':'#224018';
+    ctx.fillRect(gx,gy2,2,4);ctx.fillRect(gx+1,gy2-3,2,3);
+  }
+  // small flowers
+  const flowers=[[cx-45,gy-40],[cx+38,gy-55],[cx-30,gy-90],[cx+52,gy-30],[cx-55,gy-70]];
+  flowers.forEach(([fx,fy])=>{
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(fx-1,fy-1,1,1);ctx.fillRect(fx+1,fy-1,1,1);
+    ctx.fillRect(fx-1,fy+1,1,1);ctx.fillRect(fx+1,fy+1,1,1);
+    ctx.fillStyle='#ffee55';ctx.fillRect(fx,fy,1,1);
+  });
+
+  // ── Tent (top-down view) ──
+  const tx=cx-16, ty=gy-105;
+  // tent body — blue fabric panels
+  ctx.fillStyle='#2244aa';
+  // left panel
+  ctx.beginPath();ctx.moveTo(cx,ty+4);ctx.lineTo(tx,ty+36);ctx.lineTo(cx,ty+40);ctx.closePath();ctx.fill();
+  // right panel
+  ctx.fillStyle='#3366cc';
+  ctx.beginPath();ctx.moveTo(cx,ty+4);ctx.lineTo(cx+32,ty+36);ctx.lineTo(cx,ty+40);ctx.closePath();ctx.fill();
+  // highlight stripe on left
+  ctx.fillStyle='#4488ee';ctx.globalAlpha=0.5;
+  ctx.beginPath();ctx.moveTo(cx-2,ty+8);ctx.lineTo(cx-12,ty+28);ctx.lineTo(cx-8,ty+30);ctx.lineTo(cx,ty+10);ctx.closePath();ctx.fill();
+  ctx.globalAlpha=1;
+  // tent ridge poles (brown outline)
+  ctx.fillStyle='#7a4a22';
+  ctx.fillRect(cx-1,ty,2,42);          // center ridge
+  ctx.fillRect(tx-2,ty+30,4,10);       // left pole
+  ctx.fillRect(cx+28,ty+30,4,10);      // right pole
+  // tent front opening
+  ctx.fillStyle='#0a1830';
+  ctx.beginPath();ctx.moveTo(cx-8,ty+36);ctx.lineTo(cx,ty+40);ctx.lineTo(cx+8,ty+36);ctx.closePath();ctx.fill();
+  // pole cross marks
+  ctx.fillStyle='#9a6a33';
+  ctx.fillRect(tx-4,ty+28,8,2);ctx.fillRect(tx-1,ty+25,2,8); // X left
+  ctx.fillRect(cx+26,ty+28,8,2);ctx.fillRect(cx+29,ty+25,2,8); // X right
+
+  // ── Campfire ──
+  const fx=cx+4, fy=gy-46;
+  // stone ring
+  const stones=[[0,-8],[6,-5],[8,1],[5,7],[-1,8],[-7,5],[-8,-1],[-5,-7]];
+  ctx.fillStyle='#666666';
+  stones.forEach(([sx,sy])=>ctx.fillRect(fx+sx-2,fy+sy-2,4,4));
+  ctx.fillStyle='#888888';
+  stones.forEach(([sx,sy])=>ctx.fillRect(fx+sx-1,fy+sy-2,2,2));
+  // ash/embers center
+  ctx.fillStyle='#1a0800';ctx.fillRect(fx-4,fy-4,8,8);
+  ctx.fillStyle='#881100';ctx.fillRect(fx-2,fy-2,4,4);
+  ctx.fillStyle='#cc2200';ctx.fillRect(fx-1,fy-1,2,2);
+  // animated flames
+  const flicker=0.5+0.5*Math.sin(t*8);
+  const flicker2=0.5+0.5*Math.sin(t*6+1.2);
+  ctx.globalAlpha=0.85+flicker*0.15;
+  ctx.fillStyle='#ff6600';ctx.fillRect(fx-2,fy-6,4,4);
+  ctx.fillStyle='#ff9900';ctx.fillRect(fx-1,fy-8,2,4);
+  ctx.globalAlpha=flicker*0.9;
+  ctx.fillStyle='#ffcc00';ctx.fillRect(fx,fy-9,2,3);
+  ctx.globalAlpha=flicker2*0.7;
+  ctx.fillStyle='#ff4400';ctx.fillRect(fx-3,fy-7,2,3);
+  ctx.globalAlpha=1;
+  // smoke puffs
+  const smokeY1=fy-16+Math.sin(t*0.9)*2, smokeY2=fy-26+Math.sin(t*0.7+1)*2;
+  ctx.fillStyle='#aabbcc';ctx.globalAlpha=0.18;ctx.fillRect(fx-2,Math.round(smokeY1),5,5);
+  ctx.globalAlpha=0.12;ctx.fillRect(fx-1,Math.round(smokeY2),4,4);
+  ctx.globalAlpha=1;
+
+  // ── Sword stuck in ground ──
+  const swx=cx+38, swy=gy-28;
+  ctx.save();
+  ctx.translate(swx,swy);
+  ctx.rotate(-0.45); // tilted like reference
+  // blade
+  ctx.fillStyle='#ccddee';ctx.fillRect(-2,-28,4,28);
+  ctx.fillStyle='#aabbcc';ctx.fillRect(-1,-28,1,28); // shine
+  ctx.fillStyle='#ddeeff';ctx.fillRect(-2,-30,3,4);  // tip
+  // crossguard
+  ctx.fillStyle='#cc4400';ctx.fillRect(-8,-2,16,4);
+  ctx.fillStyle='#ff6622';ctx.fillRect(-7,-2,14,2);
+  // grip
+  ctx.fillStyle='#5a2200';ctx.fillRect(-2,2,4,12);
+  ctx.fillStyle='#7a3a18';ctx.fillRect(-1,2,2,12);
+  // pommel
+  ctx.fillStyle='#cc3300';ctx.fillRect(-3,14,6,6);
+  ctx.fillStyle='#ff4400';ctx.fillRect(-2,15,4,3);
+  ctx.restore();
+
+  // ── Camp HP bar + label ──
   const hpPct=Math.max(0,CombatSystem.cityHp/CombatSystem.cityMaxHp);
-  ctx.fillStyle='#0a1020';ctx.fillRect(cx-40,gy-90,80,5);
-  ctx.fillStyle=hpPct>0.5?'#44cc44':hpPct>0.25?'#cccc22':'#cc2222';ctx.fillRect(cx-40,gy-90,80*hpPct,5);
-  ctx.font='4px "Press Start 2P",monospace';ctx.fillStyle='#446677';ctx.textAlign='center';ctx.fillText('CAMP',cx,gy-95);ctx.textAlign='left';
+  ctx.fillStyle='#0a1020';ctx.fillRect(cx-40,gy-118,80,5);
+  ctx.fillStyle=hpPct>0.5?'#44cc44':hpPct>0.25?'#cccc22':'#cc2222';
+  ctx.fillRect(cx-40,gy-118,80*hpPct,5);
+  ctx.font='4px "Press Start 2P",monospace';ctx.fillStyle='#446677';
+  ctx.textAlign='center';ctx.fillText('CAMP',cx,gy-122);ctx.textAlign='left';
+
+  ctx.restore();
 }
 
 // Pre-baked tile variation — stable seeds so floor never flickers
@@ -2324,8 +2419,8 @@ function spawnForge(){
   showMessage('⚙ Forge built! Gold production increased.');
 }
 function spawnMine(level){
-  const barH=76;const x=100+Math.random()*(canvas.width-200);
-  mines.push(new CrystalMine(x,canvas.height-barH,level||1));
+  const x=100+Math.random()*(canvas.width-200);
+  mines.push(new CrystalMine(x,canvas.height-110,level||1));
   showMessage('⛏ Crystal Mine built!');
 }
 function spawnConduit(){
@@ -2864,7 +2959,7 @@ function gameLoop(ts){
 
   // UI updates (every 3 ticks)
   _uiTick++;
-  if(_uiTick%3===0){updateUI();updateHeroBar();}
+  if(_uiTick%3===0){updateUI();updateHeroBar();if(WaveSystem.waveActive)WaveSystem._updateHUD();}
 
   // Auto-save every 600 ticks
   if(G.tick%600===0)saveGame();
@@ -2940,16 +3035,10 @@ let _cloudSaveTimer = null;
 // ── Login button ──────────────────────────────
 document.getElementById('btn-google-login').onclick = () => {
   const provider = new firebase.auth.GoogleAuthProvider();
-  _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => _auth.signInWithPopup(provider))
-    .catch(err => {
-      console.error('Login failed:', err);
-      if (err.code === 'auth/popup-blocked') {
-        alert('Popup blocked — please allow popups for this site and try again.');
-      } else {
-        alert('Login failed: ' + err.message);
-      }
-    });
+  _auth.signInWithPopup(provider).catch(err => {
+    console.error('Login failed:', err);
+    alert('Login failed: ' + err.message);
+  });
 };
 
 // ── Logout button ────────────────────────────
