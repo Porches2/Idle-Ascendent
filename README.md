@@ -3,7 +3,7 @@
 An idle RPG built with HTML5 Canvas. Fight boss waves, recruit heroes, forge weapons, and ascend to Legend & Mystic tiers.
 
 ## 🎮 Play
-👉 **[Play on GitHub Pages](https://YOUR_USERNAME.github.io/YOUR_REPO_NAME)**
+👉 **[Play on GitHub Pages](https://porches2.github.io/Idle-Ascendent)**
 
 ## ✨ Features
 - Pixel-art heroes with idle/walk/attack/death animations
