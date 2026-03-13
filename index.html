@@ -299,6 +299,24 @@ body{background:var(--bg);color:#8aacca;font-family:var(--font);overflow:hidden;
 .inv-slot-name{font-family:var(--font);font-size:3px;color:#5a7a9a;text-align:center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:90%;padding:0 2px;}
 .inv-empty-msg{font-family:var(--font);font-size:6px;color:#2a4a6a;text-align:center;padding:30px 0;line-height:2.5;}
+/* ── HERO PICKER MODAL ── */
+#hero-picker-modal{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(300px,90vw);max-height:70vh;background:#050810;border:2px solid var(--teal);outline:2px solid #030610;outline-offset:-4px;padding:0;z-index:60;pointer-events:all;overflow:hidden;flex-direction:column;}
+#hero-picker-modal.open{display:flex;}
+#hero-picker-hdr{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #0e1a2a;flex-shrink:0;}
+#hero-picker-title{font-family:var(--font);font-size:6px;color:var(--teal);letter-spacing:1px;}
+.hero-picker-close{background:#0a0e1a;border:1px solid var(--border);color:#446677;font-family:var(--font);font-size:7px;width:18px;height:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.hero-picker-close:hover{border-color:var(--red);color:var(--red);}
+#hero-picker-list{overflow-y:auto;flex:1;padding:6px;}
+.hero-pick-row{display:flex;align-items:center;gap:6px;padding:5px 6px;margin:2px 0;background:#070c18;border:1px solid #1a2a4a;cursor:pointer;}
+.hero-pick-row:hover{background:#0e1830;border-color:var(--teal);}
+.hero-pick-row.disabled{opacity:0.35;cursor:not-allowed;pointer-events:none;}
+.hero-pick-tier{font-family:var(--font);font-size:4px;padding:1px 3px;border:1px solid;}
+.hero-pick-tier.mystic{color:#dd88ff;border-color:#cc44ff;background:#1a0028;}
+.hero-pick-tier.legend{color:#ff6622;border-color:#ff4400;background:#2a0800;}
+.hero-pick-tier.champion{color:#ffcc44;border-color:#cc8800;background:#2a1a00;}
+.hero-pick-tier.normal{color:#446677;border-color:#1a2a4a;background:#070c18;}
+.hero-pick-name{font-family:var(--font);font-size:5px;color:#8aacca;flex:1;}
+.hero-pick-info{font-family:var(--font);font-size:4px;color:#446677;}
 /* detail view */
 #inv-detail{display:none;flex-direction:column;gap:8px;padding:12px;}
 #inv-detail.open{display:flex;}
@@ -567,6 +585,13 @@ body{background:var(--bg);color:#8aacca;font-family:var(--font);overflow:hidden;
 </div>
 <div id="hero-bar"><div id="hero-bar-label">PARTY</div></div>
 <div id="evo-log"></div>
+<div id="hero-picker-modal">
+  <div id="hero-picker-hdr">
+    <span id="hero-picker-title">SELECT HERO</span>
+    <button class="hero-picker-close" onclick="closeHeroPicker()">✕</button>
+  </div>
+  <div id="hero-picker-list"></div>
+</div>
 <canvas id="gameCanvas" style="touch-action:none;"></canvas>
 
 <script>
@@ -2211,12 +2236,17 @@ function openHeroPopup(h){
   if(equipped){
     whtml=`<div class="ssp-weapon"><div class="ssp-weapon-name ${WEAPON_RARITIES.find(r=>r.name===equipped.rarity)?.css||''}">${equipped.name} [${equipped.rarity}]</div><div class="ssp-weapon-stats">ATK +${_effectiveAtk(equipped)}${equipped.spd?` · SPD ${equipped.spd>0?'+':''}${equipped.spd}`:''}</div><button onclick="unequipWeapon('${equipped.uid}');openHeroPopup(heroes.find(x=>x.id===${h.id}))" style="margin-top:4px;font-family:var(--font);font-size:4px;padding:2px 5px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
   } else {
-    const avail=inv.filter(w=>!w.equippedBy).slice(0,3);
-    if(avail.length>0){
-      whtml='<div style="font-family:var(--font);font-size:4px;color:#336644;margin:4px 0;">AVAILABLE WEAPONS:</div>';
-      for(const w of avail){
+    const allWeapons=[...inv].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4)||(b.enhance||0)-(a.enhance||0));
+    if(allWeapons.length>0){
+      whtml='<div style="font-family:var(--font);font-size:4px;color:#336644;margin:4px 0;">WEAPONS:</div>';
+      for(const w of allWeapons){
         const rc=WEAPON_RARITIES.find(r=>r.name===w.rarity)?.css||'';
-        whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><button onclick="equipWeaponToHero('${w.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+        const takenBy=w.equippedBy!=null?heroes.find(x=>x.id===w.equippedBy):null;
+        if(takenBy){
+          whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040810;border:1px solid #0e1a2a;opacity:0.4;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><span style="font-family:var(--font);font-size:4px;color:#446677;">on ${takenBy.nickname}</span></div>`;
+        } else {
+          whtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${w.name} ATK+${_effectiveAtk(w)}</span><button onclick="equipWeaponToHero('${w.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+        }
       }
     } else {
       whtml='<div class="ssp-no-weapon" style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:6px;">— No weapons in inventory —</div>';
@@ -2228,12 +2258,17 @@ function openHeroPopup(h){
   if(equippedArmor){
     ahtml=`<div style="font-family:var(--font);font-size:5px;color:#224466;margin-top:5px;padding:4px 5px;background:#040e18;border:1px solid #1a3a5a;display:flex;justify-content:space-between;align-items:center;"><span>🛡 ${equippedArmor.name} DEF+${_effectiveDef(equippedArmor)}</span><button onclick="unequipArmor('${equippedArmor.uid}');openHeroPopup(h)" style="font-family:var(--font);font-size:4px;padding:1px 4px;background:#1a0808;border:1px solid #662222;color:#ff6666;cursor:pointer;">UNEQUIP</button></div>`;
   } else {
-    const availArmor=(G.armorInventory||[]).filter(a=>!a.equippedBy).slice(0,3);
-    if(availArmor.length>0){
-      ahtml='<div style="font-family:var(--font);font-size:4px;color:#224466;margin:4px 0;">AVAILABLE ARMOR:</div>';
-      for(const a of availArmor){
+    const allArmors=[...(G.armorInventory||[])].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4)||(b.enhance||0)-(a.enhance||0));
+    if(allArmors.length>0){
+      ahtml='<div style="font-family:var(--font);font-size:4px;color:#224466;margin:4px 0;">ARMOR:</div>';
+      for(const a of allArmors){
         const rc=_rarityClass(a.rarity);
-        ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><button onclick="equipArmorToHero('${a.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+        const takenBy=a.equippedBy!=null?heroes.find(x=>x.id===a.equippedBy):null;
+        if(takenBy){
+          ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040810;border:1px solid #0e1a2a;opacity:0.4;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><span style="font-family:var(--font);font-size:4px;color:#446677;">on ${takenBy.nickname}</span></div>`;
+        } else {
+          ahtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:2px 4px;margin:2px 0;background:#040e18;border:1px solid #1a2a4a;"><span class="${rc}" style="font-family:var(--font);font-size:4px;">${a.name} DEF+${_effectiveDef(a)}</span><button onclick="equipArmorToHero('${a.uid}',${h.id})" style="font-family:var(--font);font-size:4px;padding:2px 5px;background:#071418;border:1px solid #1a5a6a;color:var(--teal);cursor:pointer;">EQUIP</button></div>`;
+        }
       }
     } else {
       ahtml='<div style="font-family:var(--font);font-size:5px;color:#2a4a6a;margin-top:4px;">— No armor in inventory —</div>';
@@ -2505,7 +2540,7 @@ function openInvDetail(uid, isArmor){
       ${equipped
         ?`<span class="det-hero-tag">Equipped: ${heroName}</span>
           <button class="det-btn unequip" onclick="${isArmor?'unequipArmor':'unequipWeapon'}('${item.uid}');openInvDetail('${item.uid}',${isArmor})">UNEQUIP</button>`
-        :`<button class="det-btn equip" onclick="${isArmor?'autoEquipArmor':'autoEquipWeapon'}('${item.uid}');openInvDetail('${item.uid}',${isArmor})">AUTO-EQUIP</button>`}
+        :`<button class="det-btn equip" onclick="openHeroPicker('${item.uid}',${isArmor})">EQUIP →</button>`}
     </div>
     <div class="det-enh-row">
       <div>
@@ -2543,7 +2578,13 @@ function refreshInventoryUI(){
       wList.innerHTML='<div class="inv-empty-msg" style="grid-column:1/-1">No weapons yet.<br>Defeat enemies to get loot!</div>';
     } else {
       wList.innerHTML='';
-      const sorted=[...weapons].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4));
+      const sorted=[...weapons].sort((a,b)=>{
+        const rd=(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4);
+        if(rd!==0)return rd;
+        const eq=(a.equippedBy!=null?1:0)-(b.equippedBy!=null?1:0);
+        if(eq!==0)return eq;
+        return (b.enhance||0)-(a.enhance||0);
+      });
       for(const w of sorted){
         const slot=document.createElement('div');
         slot.className='inv-slot rarity-'+w.rarity+(w.equippedBy!=null?' equipped-slot':'');
@@ -2564,7 +2605,13 @@ function refreshInventoryUI(){
       aList.innerHTML='<div class="inv-empty-msg" style="grid-column:1/-1">No armor yet.<br>Kill boss waves to get armor!</div>';
     } else {
       aList.innerHTML='';
-      const sorted=[...armors].sort((a,b)=>(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4));
+      const sorted=[...armors].sort((a,b)=>{
+        const rd=(RARITY_ORDER[a.rarity]||4)-(RARITY_ORDER[b.rarity]||4);
+        if(rd!==0)return rd;
+        const eq=(a.equippedBy!=null?1:0)-(b.equippedBy!=null?1:0);
+        if(eq!==0)return eq;
+        return (b.enhance||0)-(a.enhance||0);
+      });
       for(const a of sorted){
         const slot=document.createElement('div');
         slot.className='inv-slot rarity-'+a.rarity+(a.equippedBy!=null?' equipped-slot':'');
@@ -2585,6 +2632,53 @@ function autoEquipWeapon(wuid){
   if(unarmed.length===0){showMessage('All heroes already have weapons!');return;}
   const target=unarmed.reduce((a,b)=>a.attackBase<b.attackBase?a:b);
   equipWeaponToHero(wuid,target.id);refreshInventoryUI();
+}
+
+// ── Hero Picker Modal ──────────────────────────
+let _pickerUid=null, _pickerIsArmor=false;
+const TIER_SORT_ORDER={mystic:0,legend:1,champion:2,normal:3};
+function openHeroPicker(uid, isArmor){
+  _pickerUid=uid; _pickerIsArmor=isArmor;
+  const modal=document.getElementById('hero-picker-modal');
+  const list=document.getElementById('hero-picker-list');
+  const item=isArmor?(G.armorInventory||[]).find(x=>x.uid===uid):(G.weaponInventory||[]).find(x=>x.uid===uid);
+  if(!item){return;}
+  document.getElementById('hero-picker-title').textContent='EQUIP '+item.name.toUpperCase();
+  const sorted=[...heroes].filter(h=>!h.isDead).sort((a,b)=>{
+    const ta=TIER_SORT_ORDER[_heroTier(a)]??3, tb=TIER_SORT_ORDER[_heroTier(b)]??3;
+    return ta-tb||b.growLevel-a.growLevel;
+  });
+  list.innerHTML='';
+  for(const h of sorted){
+    const tier=_heroTier(h);
+    const alreadyEquipped=isArmor?h.equippedArmor!=null:h.equippedWeapon!=null;
+    const row=document.createElement('div');
+    row.className='hero-pick-row'+(alreadyEquipped?' disabled':'');
+    const tierLabel={mystic:'MYS',legend:'LGD',champion:'★',normal:''}[tier]||'';
+    const currentItem=alreadyEquipped?(isArmor?(G.armorInventory||[]).find(x=>x.uid===h.equippedArmor):(G.weaponInventory||[]).find(x=>x.uid===h.equippedWeapon)):null;
+    const subInfo=alreadyEquipped&&currentItem?`has ${currentItem.name}`:`no ${isArmor?'armor':'weapon'}`;
+    row.innerHTML=`
+      ${tierLabel?`<span class="hero-pick-tier ${tier}">${tierLabel}</span>`:''}
+      <div class="hero-pick-name">${h.nickname}</div>
+      <div class="hero-pick-info">${subInfo}</div>
+      ${!alreadyEquipped?`<button style="font-family:var(--font);font-size:4px;padding:2px 6px;background:#071418;border:1px solid var(--teal);color:var(--teal);cursor:pointer;" onclick="pickHeroEquip(${h.id})">EQUIP</button>`:''}
+    `;
+    list.appendChild(row);
+  }
+  modal.classList.add('open');
+}
+function pickHeroEquip(heroId){
+  if(!_pickerUid)return;
+  if(_pickerIsArmor){equipArmorToHero(_pickerUid,heroId);}
+  else{equipWeaponToHero(_pickerUid,heroId);}
+  refreshInventoryUI();
+  closeHeroPicker();
+  // Refresh detail view with updated state
+  openInvDetail(_pickerUid,_pickerIsArmor);
+}
+function closeHeroPicker(){
+  document.getElementById('hero-picker-modal').classList.remove('open');
+  _pickerUid=null;
 }
 
 // =============================================
